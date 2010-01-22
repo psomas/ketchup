@@ -1,0 +1,129 @@
+.\"                                      Hey, EMACS: -*- nroff -*-
+.TH KETCHUP 1 "April 12, 2006"
+.\" Please adjust this date whenever revising the manpage.
+.\"
+.\" Some roff macros, for reference:
+.\" .nh        disable hyphenation
+.\" .hy        enable hyphenation
+.\" .ad l      left justify
+.\" .ad b      justify to both left and right margins
+.\" .nf        disable filling
+.\" .fi        enable filling
+.\" .br        insert line break
+.\" .sp <n>    insert n+1 empty lines
+.\" for manpage-specific macros, see man(7)
+.SH NAME
+ketchup \- Utility to update the kernel source
+.SH SYNOPSIS
+.B ketchup
+[\fIoptions\fR] \fI<ver>\fR
+.SH DESCRIPTION
+This tool synchronises a local kernel tree with a desired kernel version and
+patch set from a kernel.org mirror. The default requires a GPG key on your
+keyring, to verify the identity of the patches and source archives. Entire
+kernel images are not downloaded unless necessary, so bandwidth is saved.
+Patches are applied and removed as necessary to attain the requested version.
+.SH OPTIONS
+.HP
+.B \-a
+.B \-\-archive
+(/home/baruch/.ketchup)
+.IP
+cache directory
+.HP
+.B \-d
+.B \-\-directory
+(.)
+.IP
+directory to update
+.HP
+.B \-f
+.B \-\-full\-tarball
+.IP
+if unpacking a tarball, download the latest
+.HP
+.B \-g
+.B \-\-gpg\-path
+(/usr/bin/gpg)
+.IP
+path for GnuPG
+.HP
+.B \-G
+.B \-\-no\-gpg
+.IP
+disable GPG signature verification
+.HP
+.B \-k
+.B \-\-kernel\-url
+(http://www.kernel.org/pub/linux/kernel)
+.IP
+base url for kernel.org mirror
+.HP
+.B \-l
+.B \-\-list\-trees
+.IP
+list supported trees
+.HP
+.B \-m
+.B \-\-show\-makefile
+.IP
+output version in makefile <arg>
+.HP
+.B \-n
+.B \-\-dry\-run
+.IP
+don't download or apply patches
+.HP
+.B \-p
+.B \-\-show\-previous
+.IP
+output version previous to <arg>
+.HP
+.B \-q
+.B \-\-quiet
+.IP
+reduce output
+.HP
+.B \-r
+.B \-\-rename\-directory
+.IP
+rename updated directory to linux\-<v>
+.HP
+.B \-s
+.B \-\-show\-latest
+.IP
+output the latest version of <arg>
+.HP
+.B \-u
+.B \-\-show\-url
+.IP
+output URL for <arg>
+.HP
+.B \-w
+.B \-\-wget
+(/usr/bin/wget)
+.IP
+command to use for wget
+.PP
+.SH CONFIGURATION
+Ketchup will read files named \fI.ketchuprc\fP in $HOME and in the target kernel directory, with the kernel directory taking precedence.
+.PP
+A \fI.ketchuprc\fP file uses the Python syntax and may set the following variables:
+.HP
+.B default_tree
+.IP
+The \fBdefault_tree\fP option specifies the kernel version to work with if one is not given on the command line.
+.HP
+.B precommand
+.IP
+The \fBprecommand\fP option specifies a command to run before synchronising the kernel tree to the required version.
+.HP
+.B postcommand
+.IP
+The \fBpostcommand\fP option specifies a command to run after synchronising the kernel tree to the required version.
+.SH AUTHOR
+ketchup was written by Matt Mackall <mpm@selenic.com>.
+.PP
+This manual page was written by Baruch Even <baruch@debian.org>,
+for the Debian project (but may be used by others). Description text taken from
+a former packaging attempt of Jack Wasey <debian@jackwasey.com>.
