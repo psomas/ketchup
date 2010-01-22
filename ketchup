@@ -364,6 +364,11 @@ def trydownload(urls, f, sign):
             if download(url2, f2):
                 if not sign or verify(url2, f2, sign):
                     return f2
+	    f2 = f[:-4]
+	    url2 = url[:-4]
+	    if download(url2, f2):
+                if not sign or verify(url2, f2, sign):
+                    return f2
     return None
 
 def get_patch(ver):
@@ -375,6 +380,10 @@ def get_patch(ver):
         f2 = f[:-4] + ".gz"
         if os.path.exists(f2):
             return f2
+        f2 = f[:-4]
+        if os.path.exists(f2):
+            return f2
+
 
     urls = version_urls(ver)
     sign = find_info(ver)[3]
