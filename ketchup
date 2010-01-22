@@ -518,7 +518,7 @@ def transform(a, b):
             apply_patch(a, 1)
             a = base(a)
 
-        if post(a) and post(a) != post(b):
+        if post(a) and (post(a) != post(b) or rev(a) != rev(b)):
             apply_patch(prebase(a), 1)
 
         ra, rb = rev(a), rev(b)
