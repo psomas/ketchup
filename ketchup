@@ -1,12 +1,13 @@
 #!/usr/bin/python
 #
-# ketchup 0.9.8
-# http://selenic.com/ketchup/wiki
+# ketchup 0.9.9
+# http://git.kernel.org/pub/scm/linux/kernel/git/rostedt/ketchup.git
+# git://git.kernel.org/pub/scm/linux/kernel/git/rostedt/ketchup.git
 #
 # Copyright 2004 Matt Mackall <mpm@selenic.com>
 #
-# Added code for new RT location -
-#    Steven Rostedt <srostedt@redhat.com>
+# New maintainer: Please email issues to:
+#    Steven Rostedt <rostedt@goodmis.org>
 #
 # This software may be used and distributed according to the terms
 # of the GNU General Public License, incorporated herein by reference.
