@@ -5,6 +5,9 @@
 #
 # Copyright 2004 Matt Mackall <mpm@selenic.com>
 #
+# Added code for new RT location -
+#    Steven Rostedt <srostedt@redhat.com>
+#
 # This software may be used and distributed according to the terms
 # of the GNU General Public License, incorporated herein by reference.
 #
@@ -592,12 +595,14 @@ version_info = {
                  kernel_url + "/people/mbligh/%(prebase)s/patch-%(full)s.bz2",
                  r'patch-(2.6.*?).bz2',
                  1, "Martin Bligh's random collection 'o crap"),
-    '2.6-rt': (latest_dir,
-               ["http://people.redhat.com/mingo/" +
-                "realtime-preempt/patch-%(full)s",
-                "http://people.redhat.com/mingo/" +
-                "realtime-preempt/older/patch-%(full)s"],
-               r'patch-(2.6.*?)',
+    '2.6-rt': (last,
+               ["http://rt.et.redhat.com/download/" +
+	        "patch-%(full)s.bz2",
+		kernel_url + "/projects/rt/" +
+	        "patch-%(full)s.bz2",
+	        kernel_url + "/projects/rt/older/" +
+	        "patch-%(full)s.bz2"],
+               r'patch-(2.6.*?).bz2',
                0, "Ingo Molnar's realtime-preempt kernel"),
     '2.6-ck': (latest_ck,
                ["http://ck.kolivas.org/patches/2.6/" +
