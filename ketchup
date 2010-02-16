@@ -405,7 +405,7 @@ def apply_patch(ver, reverse = 0):
         r = " -R"
 
     qprint("Applying %s%s" % (os.path.basename(p), r))
-    if options["dry-run"]:
+    if options["dry-run"] or options["only-dl"]:
         return ver
 
     def cmd(patch, reverse, dry):
@@ -484,7 +484,7 @@ def install_nearest(ver):
         ver = list[0][2]
 
     qprint("Unpacking %s" % os.path.basename(f))
-    if options["dry-run"]: return ver
+    if options["dry-run"] or options["only-dl"]: return ver
     untar(f)
 
     return ver
@@ -658,6 +658,7 @@ opts = [
     ('l', 'list-trees', None, 'list supported trees'),
     ('m', 'show-makefile', None, 'output version in makefile <arg>'),
     ('n', 'dry-run', None, 'don\'t download or apply patches'),
+    ('o', 'only-dl', None, 'don\'t apply patches'),
     ('p', 'show-previous', None, 'output version previous to <arg>'),
     ('q', 'quiet', None, 'reduce output'),
     ('r', 'rename-directory', None, 'rename updated directory to %s<v>'
@@ -750,7 +751,7 @@ if not a and os.listdir("."):
 b = find_ver(args[0])
 qprint("%s -> %s" % (a, b))
 transform(a, b)
-if options["rename-directory"] and not options["dry-run"]:
+if options["rename-directory"] and not options["dry-run"] and not options["only-dl"] :
     rename_dir(b)
 
 if postcommand and os.system(postcommand):
