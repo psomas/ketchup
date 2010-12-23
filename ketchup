@@ -143,18 +143,19 @@ def base(ver):
     return v
 
 def forkname(ver):
-    try: return re.match(r'\d+.\d+.\d+(\.\d+)?(-(rc|pre)\d+)?(-(\w+?)\d+)?',
-                         ver).group(5)
+    try: return re.match(r'\d+.\d+.\d+(\.\d+)?(-(rc|pre)\d+)?((\.\d+)?-(\w+?)\d+)?',
+            ver).group(6)
     except: return None
 
 def forknum(ver):
     try: return int(
-        re.match(r'\d+.\d+.\d+(\.\d+)?(-(rc|pre)\d+)?(-(\w+?)(\d+))?',
-                 ver).group(6))
+        re.match(r'\d+.\d+.\d+(\.\d+)?(-(rc|pre)\d+)?((\.\d+)?-(\w+?)(\d+))?',
+            ver).group(6))
     except: return None
 
 def fork(ver):
-    try: return re.match(r'\d+.\d+.\d+(\.\d+)?(-(rc|pre)\d+)?(-(\w+))?', ver).group(4)
+    try: return re.match(r'\d+.\d+.\d+(\.\d+)?(-(rc|pre)\d+)?((\.\d+)?-(\w+))?',
+            ver).group(4)
     except: return None
 
 def get_ver(makefile):
