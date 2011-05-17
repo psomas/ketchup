@@ -209,6 +209,23 @@ def last(url, pat="(.*/)"):
         if m: n = m.group(1)
     return n
 
+def latest_ck(url, pat):
+    url = "http://www.kernel.org/pub/linux/kernel/people/ck/patches/2.6/"
+    url += last(url)
+    part = fork(last(url))
+    stable = latest_dir(os.path.dirname(version_info['2.6'][1]), \
+               version_info['2.6'][2])
+
+    return stable + part
+
+def latest_pf(url, pat):
+    url = "http://pf.natalenko.name/sources/"
+    url += last(url)
+    part = last(url,"(.*patch.*)")
+    part = re.search('\d+.\d+.\d+-pf\d+', part).group(0)
+    
+    return part
+
 def latest_dir(url, pat):
     """Find the latest link matching pat at url after sorting"""
     p = []
@@ -244,7 +261,9 @@ def version_urls(ver):
         'full': ver,
         'tree': tree(ver),
         'base': base(ver),
-        'prebase': prebase(ver)
+        'prebase': prebase(ver),
+        'fork': fork(ver),
+        'revbase': revbase(ver)
         }
 
     l = []
@@ -528,6 +547,20 @@ version_info = {
                 "patch-%(full)s.bz2"],
                r'patch-(2.6.*?).bz2',
                0, "Ingo Molnar's realtime-preempt kernel"),
+    '2.6-pf': (latest_pf, 
+               "http://pf.natalenko.name/sources" + "/%(revbase)s" 
+               + "/patch-%(full)s.bz2",
+               r'patch-(.*?).bz2',
+               0, "-pf kernel patchset"),
+     '2.6-ck': (latest_ck,
+               kernel_url + "/people/ck/patches/2.6" +
+                "/%(revbase)s/%(revbase)s%(fork)%s/patch-%(revbase)s%(fork)s.bz2",
+               "", 0,
+               "Con Kolivas' -ck patchset"),
+     '2.6-next': (latest_dir,
+                  kernel_url + "/v2.6/next" + "/patch-v%(prebase)s%(fork)s.bz2",
+                  r'patch-v(.*?).bz2',
+                  0, "linux-next tree"),
     }
 
 # Override defaults with ~/.ketchuprc which is just a Python script
