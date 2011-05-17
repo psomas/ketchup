@@ -1,14 +1,17 @@
 #!/usr/bin/python
 #
 # ketchup 1.0
-#   http://git.kernel.org/pub/scm/linux/kernel/git/rostedt/ketchup.git
-#   git://git.kernel.org/pub/scm/linux/kernel/git/rostedt/ketchup.git
+#   http://github.com/psomas/ketchup 
+#   git://github.com/psomas/ketchup.git
 #
 # Orignial code by:
 #  Copyright 2004 Matt Mackall <mpm@selenic.com>
 #
-# Added code for new RT location and now maintained by:
+# Added code for new RT location and maintained until 2011 by:
 #    Steven Rostedt <srostedt@redhat.com>
+#
+# Now maintained by:
+#    Stratos Psomadakis <psomas@cslab.ece.ntua.gr>
 #
 # This software may be used and distributed according to the terms
 # of the GNU General Public License, incorporated herein by reference.
