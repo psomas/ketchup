@@ -127,10 +127,6 @@ def post(ver):
     try: return re.match(r'\d+\.\d+\.\d+\.(\d+)', ver).group(1)
     except: return None
 
-def pretype(ver):
-    try: return re.match(r'\d+\.\d+\.\d+(\.\d+)?-((rc|pre)\d+)', ver).group(3)
-    except: return None
-
 def prenum(ver):
     try: return int(re.match(r'\d+\.\d+\.\d+-((rc|pre)(\d+))', ver).group(3))
     except: return None
@@ -193,9 +189,6 @@ def get_localversion():
 def compare_ver(a, b):
     """
     Compare kernel versions a and b
-
-    Note that -pre and -rc versions sort before the version they modify,
-    -pre sorts before -rc, -bk, -git, and -mm, etc. sort alphabetically.
     """
     if a == b: return 0
 
@@ -204,8 +197,6 @@ def compare_ver(a, b):
     c = cmp(rev(a), rev(b))
     if c: return c
     c = cmp(int(post(a) or 0), int(post(b) or 0))
-    if c: return c
-    c = cmp(pretype(a), pretype(b)) # pre sorts before rc
     if c: return c
     c = cmp(prenum(a), prenum(b))
     if c: return c
@@ -219,27 +210,6 @@ def last(url, pat="(.*/)"):
         if m: n = m.group(1)
     return n
 
-def latest_mm(url, pat):
-    url = kernel_url + '/people/akpm/patches/2.6/'
-    url += last(url)
-    part = last(url)
-    return part[:-1]
-
-def latest_ck(url, pat):
-    url = "http://ck.kolivas.org/patches/2.6/pre-releases/"
-    url += last(url)
-    part = last(url)
-    pre = part[:-1]
-
-    url = "http://ck.kolivas.org/patches/2.6/"
-    url += last(url,"(2.6.*/)")
-    part = last(url)
-    rel = part[:-1]
-
-    l = [pre, rel]
-    l.sort(compare_ver)
-    return l[-1]
-
 def latest_dir(url, pat):
     """Find the latest link matching pat at url after sorting"""
     p = []
@@ -252,37 +222,6 @@ def latest_dir(url, pat):
     p.sort(compare_ver)
     return p[-1]
 
-# mbligh is lazy and has a bunch of empty directories
-def latest_mjb(url, pat):
-    url = kernel_url + '/people/mbligh/'
-
-    # find the last Linus release and search backwards
-    l = [find_ver('2.6'), find_ver("2.6-pre")]
-    l.sort(compare_ver)
-    linus = l[-1]
-
-    p = []
-    for l in urllib.urlopen(url).readlines():
-        m = re.search('"(2\.6\..*/)"', l)
-        if m:
-            v = m.group(1)
-            if compare_ver(v, linus) <= 0:
-                p.append(v)
-
-    p.sort(compare_ver)
-    p.reverse()
-
-    for ver in p:
-        mjb = latest_dir(url + ver, pat)
-        if mjb: return mjb
-
-    return None
-
-def latest_26_tip(url, pat):
-    l = [find_ver('2.6'), find_ver('2.6-git'), find_ver('2.6-pre')]
-    l.sort(compare_ver)
-    return l[-1]
-
 def find_info(ver):
     b = "%.1f" % tree(ver)
     f = forkname(ver)
@@ -292,7 +231,7 @@ def find_info(ver):
     if f:
         s = "%s-%s" % (b, f)
     elif p:
-        s = "%s-pre" % b
+        s = "%s-rc" % b
 
     return version_info[s]
 
@@ -570,10 +509,6 @@ version_info = {
             kernel_url + "/v2.4" + "/patch-%(base)s.bz2",
             r'patch-(.*?).bz2',
             1, "old stable kernel series"),
-    '2.4-pre': (latest_dir,
-                kernel_url + "/v2.4" + "/testing/patch-%(prebase)s.bz2",
-                r'patch-(.*?).bz2',
-                1, "old stable kernel series prereleases"),
     '2.6': (latest_dir,
             kernel_url + "/v2.6" + "/patch-%(prebase)s.bz2",
             r'patch-(.*?).bz2',
@@ -582,34 +517,10 @@ version_info = {
                 kernel_url + "/v2.6" + "/testing/patch-%(prebase)s.bz2",
                 r'patch-(.*?).bz2',
                 1, "current stable kernel series prereleases"),
-    '2.6-pre': (latest_dir,
-                kernel_url + "/v2.6" + "/testing/patch-%(prebase)s.bz2",
-                r'patch-(.*?).bz2',
-                1, "current stable kernel series prereleases"),
     '2.6-git': (latest_dir,
-                [kernel_url + "/v2.6" + "/snapshots/patch-%(full)s.bz2",
-                 kernel_url + "/v2.6" + "/snapshots/old/patch-%(full)s.bz2"],
+                kernel_url + "/v2.6" + "/snapshots/patch-%(full)s.bz2",
                 r'patch-(.*?).bz2',
                 1, "current stable kernel series snapshots"),
-    '2.6-bk': (latest_dir,
-               [kernel_url + "/v2.6" + "/snapshots/patch-%(full)s.bz2",
-                kernel_url + "/v2.6" + "/snapshots/old/patch-%(full)s.bz2"],
-               r'patch-(.*?).bz2',
-               1, "old stable kernel series snapshots"),
-    '2.6-tip': (latest_26_tip, "", "", 1,
-                "current stable kernel series tip"),
-    '2.6-mm': (latest_mm,
-               kernel_url + "/people/akpm/patches/" +
-               "%(tree)s/%(prebase)s/%(full)s/%(full)s.bz2", "",
-               1, "Andrew Morton's -mm development tree"),
-    '2.6-tiny': (latest_dir,
-                 "http://www.selenic.com/tiny/%(full)s.patch.bz2",
-                 r'(2.6.*?).patch.bz2',
-                 1, "Matt Mackall's -tiny tree for small systems"),
-    '2.6-mjb': (latest_mjb,
-                 kernel_url + "/people/mbligh/%(prebase)s/patch-%(full)s.bz2",
-                 r'patch-(2.6.*?).bz2',
-                 1, "Martin Bligh's random collection 'o crap"),
     '2.6-rt': (last,
                ["http://rt.et.redhat.com/download/" +
 	        "patch-%(full)s.bz2",
@@ -619,17 +530,6 @@ version_info = {
 	        "patch-%(full)s.bz2"],
                r'patch-(2.6.*?).bz2',
                0, "Ingo Molnar's realtime-preempt kernel"),
-    '2.6-ck': (latest_ck,
-               ["http://ck.kolivas.org/patches/2.6/" +
-                "%(prebase)s/%(full)s/patch-%(full)s.bz2",
-                "http://ck.kolivas.org/patches/2.6/pre-releases/" +
-                "%(prebase)s/%(full)s/patch-%(full)s.bz2"],
-               "", ".sig",
-               "Con Kolivas' patches for system responsiveness (desktop)"),
-    '2.6-cks': (latest_dir,
-                "http://ck.kolivas.org/patches/cks/patch-%(full)s.bz2",
-                r'patch-(2.6.*?).bz2', ".sig",
-                "Con Kolivas' patches for system responsiveness (server)")
     }
 
 # Override defaults with ~/.ketchuprc which is just a Python script
