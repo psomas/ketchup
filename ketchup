@@ -309,9 +309,9 @@ def trydownload(urls, f, sign):
             if download(url2, f2):
                 if not sign or verify(url2, f2, sign):
                     return f2
-	    f2 = f[:-4]
-	    url2 = url[:-4]
-	    if download(url2, f2):
+            f2 = f[:-4]
+            url2 = url[:-4]
+            if download(url2, f2):
                 if not sign or verify(url2, f2, sign):
                     return f2
     return None
@@ -328,7 +328,6 @@ def get_patch(ver):
         f2 = f[:-4]
         if os.path.exists(f2):
             return f2
-
 
     urls = version_urls(ver)
     sign = find_info(ver)[3]
@@ -514,20 +513,20 @@ version_info = {
             r'patch-(.*?).bz2',
             1, "current stable kernel series"),
     '2.6-rc': (latest_dir,
-                kernel_url + "/v2.6" + "/testing/patch-%(prebase)s.bz2",
-                r'patch-(.*?).bz2',
-                1, "current stable kernel series prereleases"),
+               kernel_url + "/v2.6" + "/testing/patch-%(prebase)s.bz2",
+               r'patch-(.*?).bz2',
+               1, "current stable kernel series prereleases"),
     '2.6-git': (latest_dir,
                 kernel_url + "/v2.6" + "/snapshots/patch-%(full)s.bz2",
                 r'patch-(.*?).bz2',
                 1, "current stable kernel series snapshots"),
     '2.6-rt': (last,
                ["http://rt.et.redhat.com/download/" +
-	        "patch-%(full)s.bz2",
-		kernel_url + "/projects/rt/" +
-	        "patch-%(full)s.bz2",
-	        kernel_url + "/projects/rt/older/" +
-	        "patch-%(full)s.bz2"],
+                "patch-%(full)s.bz2",
+                kernel_url + "/projects/rt/" +
+                "patch-%(full)s.bz2",
+                kernel_url + "/projects/rt/older/" +
+                "patch-%(full)s.bz2"],
                r'patch-(2.6.*?).bz2',
                0, "Ingo Molnar's realtime-preempt kernel"),
     }
@@ -597,10 +596,10 @@ if options["list-trees"]:
     l = version_info.keys()
     l.sort()
     for tree in l:
-	if version_info[tree][3] == 0:
-	   lprint(tree, "(unsigned)")
+        if version_info[tree][3] == 0:
+            lprint(tree, "(unsigned)")
         else:
-	   lprint(tree, "(signed)")
+            lprint(tree, "(signed)")
         lprint(" " + version_info[tree][4])
     sys.exit(0)
 
