@@ -143,18 +143,17 @@ def base(ver):
     return v
 
 def forkname(ver):
-    try: return re.match(r'\d+.\d+.\d+(\.\d+)?(-(rc|pre)\d+)?((\.\d+)?-(\w+?)\d+)?',
-            ver).group(6)
+    try: return re.match(r'\d+.\d+.\d+(\.\d+)?(-(rc|pre)\d+)?((\.\d+)?-((\w+)?(-)?(\d+)?))?',
+            ver).group(7)
     except: return None
 
 def forknum(ver):
-    try: return int(
-        re.match(r'\d+.\d+.\d+(\.\d+)?(-(rc|pre)\d+)?((\.\d+)?-(\w+?)(\d+))?',
-            ver).group(6))
-    except: return None
+    return int(
+        re.match(r'\d+.\d+.\d+(\.\d+)?(-(rc|pre)\d+)?((\.\d+)?-(\w+?)(-)?(\d+))?',
+            ver).group(8))
 
 def fork(ver):
-    try: return re.match(r'\d+.\d+.\d+(\.\d+)?(-(rc|pre)\d+)?((\.\d+)?-(\w+))?',
+    try: return re.match(r'\d+.\d+.\d+(\.\d+)?(-(rc|pre)\d+)?((\.\d+)?-(\w+(-)?(\d+)?))?',
             ver).group(4)
     except: return None
 
