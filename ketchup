@@ -520,7 +520,7 @@ def rename_dir(v):
 
 
 # latest lookup function, canonical urls, pattern for lookup function,
-#  signature flag, description
+# signature flag, description
 version_info = {
     '2.4': (latest_dir,
             kernel_url + "/v2.4" + "/patch-%(base)s.bz2",
@@ -552,15 +552,15 @@ version_info = {
                + "/patch-%(full)s.bz2",
                r'patch-(.*?).bz2',
                0, "-pf kernel patchset"),
-     '2.6-ck': (latest_ck,
+    '2.6-ck': (latest_ck,
                kernel_url + "/people/ck/patches/2.6" +
-                "/%(revbase)s/%(revbase)s%(fork)%s/patch-%(revbase)s%(fork)s.bz2",
+               "/%(revbase)s/%(revbase)s%(fork)%s/patch-%(revbase)s%(fork)s.bz2",
                "", 0,
                "Con Kolivas' -ck patchset"),
-     '2.6-next': (latest_dir,
-                  kernel_url + "/v2.6/next" + "/patch-v%(prebase)s%(fork)s.bz2",
-                  r'patch-v(.*?).bz2',
-                  0, "linux-next tree"),
+    '2.6-next': (latest_dir,
+                 kernel_url + "/v2.6/next" + "/patch-v%(prebase)s%(fork)s.bz2",
+                 r'patch-v(.*?).bz2',
+                 0, "linux-next tree"),
     }
 
 # Override defaults with ~/.ketchuprc which is just a Python script
