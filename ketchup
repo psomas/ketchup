@@ -1,8 +1,8 @@
 #!/usr/bin/python
 #
 # ketchup 1.0.1
-#   http://github.com/psomas/ketchup 
-#   git://github.com/psomas/ketchup.git
+#    http://github.com/psomas/ketchup 
+#    git://github.com/psomas/ketchup.git
 #
 # Orignial code by:
 #    Copyright 2004 Matt Mackall <mpm@selenic.com>
@@ -55,7 +55,6 @@ def qprint(*args):
 def lprint(*args):
     sys.stdout.write(" ".join(map(str, args)))
     sys.stdout.write("\n")
-
 
 def fancyopts(args, options, state, syntax=''):
     long = []
@@ -166,7 +165,7 @@ def fork(ver):
 def get_ver(makefile):
     """ Read the version information from the specified makefile """
     part = {}
-    parts = "VERSION PATCHLEVEL SUBLEVEL EXTRAVERSION".split(' ')
+    parts = "VERSION PATCHLEVEL SUBLEVEL EXTRAVERSION CKVERSION".split(' ')
     m = open(makefile)
     for l in m.readlines():
         for p in parts:
@@ -175,6 +174,14 @@ def get_ver(makefile):
 
     version = "%s.%s.%s" % tuple([part[p] for p in parts[:3]])
     version += part.get("EXTRAVERSION","")
+    version += part.get("CKVERSION","")
+	
+    # required for -next patchset 
+    try: n = open("localversion-next")
+    except: return version
+
+    version += n.read()[:-1]
+
     return version
 
 def get_localversion():
@@ -215,12 +222,20 @@ def last(url, pat="(.*/)"):
         if m: n = m.group(1)
     return n
 
+def latest_mmotm(url, pat):
+    for l in  urllib.urlopen(url + "/broken-out/mm.patch").readlines():
+        m = re.search('-EXTRAVERSION = (\S+)', l)
+        if m: n = m.group(1)
+
+    latest = latest_dir(os.path.dirname(version_info['2.6-rc'][1]), ('patch-(.*%s).bz2' % n)) 
+
+    return latest + "-mm1"
+
 def latest_ck(url, pat):
     url = "http://www.kernel.org/pub/linux/kernel/people/ck/patches/2.6/"
     url += last(url)
     part = fork(last(url))
-    stable = latest_dir(os.path.dirname(version_info['2.6'][1]), \
-               version_info['2.6'][2])
+    stable = latest_dir(os.path.dirname(version_info['2.6'][1][0]), version_info['2.6'][2])
 
     return stable + part
 
@@ -308,7 +323,12 @@ def version_urls(ver):
     return l
 
 def patch_path(ver):
-    return os.path.join(archive, os.path.basename(version_urls(ver)[0]))
+    patch_name = os.path.basename(version_urls(ver)[0])
+    if re.search(r'\d+\.\d+', patch_name) == None:
+        suf = re.search(r'\.tar\.(gz|(bz(\d+)?))', patch_name).group(0)
+        patch_name = re.sub(r'(\.tar\.(gz|(bz(\d+)?)))', "-%s%s" % (ver, suf), patch_name)
+    
+    return os.path.join(archive, patch_name)
 
 def download(url, f):
     qprint("Downloading %s" % os.path.basename(url))
@@ -405,6 +425,12 @@ def get_patch(ver):
     f = patch_path(ver)
     if os.path.exists(f):
         return f
+
+    if re.search(r'-mm1', ver) != None:
+        if pre(find_ver('2.6-rc')) != pre(ver):
+            error("-mm1 patchset can only be applied to the latest -rc release!")
+            sys.exit(-1)
+
     if f[-4:] == ".bz2":
         f2 = f[:-4] + ".gz"
         if os.path.exists(f2):
@@ -423,6 +449,35 @@ def get_patch(ver):
 
     return f
 
+def apply_mmotm(ver, reverse = 0):
+    if reverse:
+        err = os.system("quilt pop -a &> .patchdiag")
+        if err:
+            sys.stderr.write(open(".patchdiag").read())
+        os.unlink(".patchdiag")
+        os.system("rm -rf patches .pc Next")
+    else:
+        old = os.getcwd()
+        os.mkdir("patches")
+        os.chdir("patches")
+        err = os.system("zcat %s | tar -xf -" % patch_path(ver))
+        if err:
+            error("Unpacking failed: ", err)
+            os.chdir(old)
+            os.system("rm -rf patches")
+            sys.exit(-1)
+ 
+        os.system("mv broken-out/*.patch ./")
+
+        os.chdir(old)
+
+        err = os.system("quilt push -a --leave-rejects &> .patchdiag")
+        if err:
+            sys.stderr.write(open(".patchdiag").read())
+        os.unlink(".patchdiag")
+
+    return err
+
 def apply_patch(ver, reverse = 0):
     """Find the patch to upgrade from the predecessor of ver to ver and
     apply or reverse it."""
@@ -434,6 +489,9 @@ def apply_patch(ver, reverse = 0):
     qprint("Applying %s%s" % (os.path.basename(p), r))
     if options["dry-run"] or options["only-dl"]:
         return ver
+
+    if forkname(ver) == "mm":
+        return apply_mmotm(ver, reverse)
 
     def cmd(patch, reverse, dry):
         base = "patch -l -p1%s" % reverse
@@ -623,13 +681,17 @@ version_info = {
                0, "-pf kernel patchset"),
     '2.6-ck': (latest_ck,
                "%(kernel_url)s" + "/people/ck/patches/2.6" +
-               "/%(revbase)s/%(revbase)s%(fork)%s/patch-%(revbase)s%(fork)s.bz2",
+               "/%(revbase)s/%(revbase)s%(fork)s/patch-%(revbase)s%(fork)s.bz2",
                "", 0,
                "Con Kolivas' -ck patchset"),
     '2.6-next': (latest_dir,
                  "%(kernel_url)s" + "/v2.6/next" + "/patch-v%(prebase)s%(fork)s.bz2",
                  r'patch-v(.*?).bz2',
                  0, "linux-next tree"),
+    '2.6-mm': (latest_mmotm, 
+               "http://userweb.kernel.org/~akpm/mmotm/broken-out.tar.gz",
+               r'broken-out.tar.gz',
+               0, "-mmotm quilt patchset"),
     }
 
 # Override defaults with ~/.ketchuprc which is just a Python script
