@@ -229,6 +229,7 @@ def latest_pf(url, pat):
 def latest_dir(url, pat):
     """Find the latest link matching pat at url after sorting"""
     p = []
+    url = url % { "kernel_url": kernel_url }
     for l in urllib.urlopen(url).readlines():
         m = re.search('"%s"' % pat, l)
         if m: p.append(m.group(1))
@@ -263,7 +264,8 @@ def version_urls(ver):
         'base': base(ver),
         'prebase': prebase(ver),
         'fork': fork(ver),
-        'revbase': revbase(ver)
+        'revbase': revbase(ver),
+        'kernel_url': kernel_url
         }
 
     l = []
@@ -525,24 +527,24 @@ def rename_dir(v):
 # signature flag, description
 version_info = {
     '2.4': (latest_dir,
-            kernel_url + "/v2.4" + "/patch-%(base)s.bz2",
+            "%(kernel_url)s" + "/v2.4" + "/patch-%(base)s.bz2",
             r'patch-(.*?).bz2',
             1, "old stable kernel series"),
     '2.6': (latest_dir,
-            kernel_url + "/v2.6" + "/patch-%(prebase)s.bz2",
+            "%(kernel_url)s" + "/v2.6" + "/patch-%(prebase)s.bz2",
             r'patch-(.*?).bz2',
             1, "current stable kernel series"),
     '2.6-rc': (latest_dir,
-               kernel_url + "/v2.6" + "/testing/patch-%(prebase)s.bz2",
+               "%(kernel_url)s" + "/v2.6" + "/testing/patch-%(prebase)s.bz2",
                r'patch-(.*?).bz2',
                1, "current stable kernel series prereleases"),
     '2.6-git': (latest_dir,
-                kernel_url + "/v2.6" + "/snapshots/patch-%(full)s.bz2",
+                "%(kernel_url)s" + "/v2.6" + "/snapshots/patch-%(full)s.bz2",
                 r'patch-(.*?).bz2',
                 1, "current stable kernel series snapshots"),
     '2.6-rt': (latest_dir,
-               [kernel_url + "/projects/rt/patch-%(full)s.bz2",
-                 kernel_url + "/projects/rt/older/patch-%(full)s.bz2"],
+               ["%(kernel_url)s" + "/projects/rt/patch-%(full)s.bz2",
+                "%(kernel_url)s" + "/projects/rt/older/patch-%(full)s.bz2"],
                r'patch-(2.6.*?).bz2',
                0, "Ingo Molnar's realtime-preempt kernel"),
     '2.6-pf': (latest_pf, 
@@ -551,12 +553,12 @@ version_info = {
                r'patch-(.*?).bz2',
                0, "-pf kernel patchset"),
     '2.6-ck': (latest_ck,
-               kernel_url + "/people/ck/patches/2.6" +
+               "%(kernel_url)s" + "/people/ck/patches/2.6" +
                "/%(revbase)s/%(revbase)s%(fork)%s/patch-%(revbase)s%(fork)s.bz2",
                "", 0,
                "Con Kolivas' -ck patchset"),
     '2.6-next': (latest_dir,
-                 kernel_url + "/v2.6/next" + "/patch-v%(prebase)s%(fork)s.bz2",
+                 "%(kernel_url)s" + "/v2.6/next" + "/patch-v%(prebase)s%(fork)s.bz2",
                  r'patch-v(.*?).bz2',
                  0, "linux-next tree"),
     }
