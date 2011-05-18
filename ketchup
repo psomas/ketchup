@@ -463,12 +463,13 @@ def install_nearest(ver):
     if not list or (options["full-tarball"] and list[0][0]):
         f = "linux-%s.tar.bz2" % ver
         url = "%s/v%s/%s" % (kernel_url, t, f)
+        url_longterm = "%s/v%s/longterm/v%s/%s" % (kernel_url, t, revbase(ver), f)
         f = archive + "/" + f
 
         sign = find_info(ver)[3]
         if sign == 1: sign = ".sign"
 
-        f = trydownload([url], f, sign)
+        f = trydownload([url, url_longterm], f, sign)
         if not f:
             error("Tarball download failed")
             sys.exit(-1)
@@ -560,7 +561,8 @@ version_info = {
             r'patch-(.*?).bz2',
             1, "old stable kernel series"),
     '2.6': (latest_dir,
-            "%(kernel_url)s" + "/v2.6" + "/patch-%(prebase)s.bz2",
+            ["%(kernel_url)s" + "/v2.6" + "/patch-%(prebase)s.bz2",
+             "%(kernel_url)s" + "/v2.6/longterm/v%(revbase)s/patch-%(prebase)s.bz2"],
             r'patch-(.*?).bz2',
             1, "current stable kernel series"),
     '2.6-rc': (latest_dir,
