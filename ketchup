@@ -5,13 +5,19 @@
 #   git://github.com/psomas/ketchup.git
 #
 # Orignial code by:
-#  Copyright 2004 Matt Mackall <mpm@selenic.com>
+#    Copyright 2004 Matt Mackall <mpm@selenic.com>
 #
 # Added code for new RT location and maintained until 2011 by:
 #    Steven Rostedt <srostedt@redhat.com>
 #
 # Now maintained by:
 #    Stratos Psomadakis <psomas@cslab.ece.ntua.gr>
+# 
+# Contributors:
+#    Baruch Even <baruch@debian.org>
+#    Pavel Machek <pavel@ucw.cz>
+#    Johann Felix Soden <johfel@gmx.de>
+#    Carsten Emde <C.Emde@osadl.org>
 #
 # This software may be used and distributed according to the terms
 # of the GNU General Public License, incorporated herein by reference.
