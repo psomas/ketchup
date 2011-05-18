@@ -538,13 +538,9 @@ version_info = {
                 kernel_url + "/v2.6" + "/snapshots/patch-%(full)s.bz2",
                 r'patch-(.*?).bz2',
                 1, "current stable kernel series snapshots"),
-    '2.6-rt': (last,
-               ["http://rt.et.redhat.com/download/" +
-                "patch-%(full)s.bz2",
-                kernel_url + "/projects/rt/" +
-                "patch-%(full)s.bz2",
-                kernel_url + "/projects/rt/older/" +
-                "patch-%(full)s.bz2"],
+    '2.6-rt': (latest_dir,
+               [kernel_url + "/projects/rt/patch-%(full)s.bz2",
+                 kernel_url + "/projects/rt/older/patch-%(full)s.bz2"],
                r'patch-(2.6.*?).bz2',
                0, "Ingo Molnar's realtime-preempt kernel"),
     '2.6-pf': (latest_pf, 
