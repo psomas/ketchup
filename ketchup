@@ -226,6 +226,33 @@ def latest_pf(url, pat):
     
     return part
 
+def latest_dir_lt(url, pat):
+    """Find the latest link to the stable release series that is used local"""
+    cwd=os.getcwd()
+    lv = None
+    if os.path.isdir(options["directory"]):
+        os.chdir(options["directory"])
+        try:
+            lv = get_ver('Makefile')
+        except:
+            lv = None
+        os.chdir(cwd)
+    if not lv:
+        qprint("No local version found. Use newest kernel release instead.")
+        return latest_dir(url, pat)
+    local_revbase = revbase(lv)
+    p = []
+    url = url % { "kernel_url": kernel_url }
+    for l in urllib.urlopen(url).readlines():
+        m = re.search('"%s"' % pat, l)
+        if m and revbase(m.group(1))==local_revbase:
+            p.append(m.group(1))
+
+    if not p: return None
+
+    p.sort(compare_ver)
+    return p[-1]
+
 def latest_dir(url, pat):
     """Find the latest link matching pat at url after sorting"""
     p = []
@@ -565,6 +592,11 @@ version_info = {
              "%(kernel_url)s" + "/v2.6/longterm/v%(revbase)s/patch-%(prebase)s.bz2"],
             r'patch-(.*?).bz2',
             1, "current stable kernel series"),
+    '2.6-lt': (latest_dir_lt,
+               ["%(kernel_url)s" + "/v2.6" + "/patch-%(prebase)s.bz2",
+                "%(kernel_url)s" + "/v2.6/longterm/v%(revbase)s/patch-%(prebase)s.bz2"],
+               r'patch-(.*?).bz2',
+               1, "stable kernel series - update (only) to newer longterm stable releases (fourth number of 2.6 kernels)"),
     '2.6-rc': (latest_dir,
                "%(kernel_url)s" + "/v2.6" + "/testing/patch-%(prebase)s.bz2",
                r'patch-(.*?).bz2',
