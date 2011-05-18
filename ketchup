@@ -288,10 +288,12 @@ def download(url, f):
     else:
         e = os.system("%s -c -O %s %s" %
                       (options["wget"], f + ".partial", url))
+        if e & 255:
+            error("wget terminated by signal.")
+            sys.exit(1)
         if e:
             return None
         os.rename(f + ".partial", f)
-
     return 1
 
 def verify(url, f, sign):
