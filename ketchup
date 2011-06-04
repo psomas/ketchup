@@ -116,31 +116,93 @@ local_trees = {}
 # Functions to parse version strings
 
 def tree(ver):
-    return float(re.match(r'(\d+\.\d+)', ver).group(1))
+    # every version must start with x.y, exit otherwise
+    t = re.match(r'((\d+)\.\d+)', ver)
+    if t == None:
+        error("Invalid tree version!")
+        sys.exit(-1)
+
+    # linux versions >=3.0 use only the first digit to define the 'tree'
+    ret = int(t.group(2)) 
+    if ret >= 3:
+        return ret
+
+    # 2.x linux trees 
+    return float(t.group(1))
 
 def rev(ver):
     p = pre(ver)
-    r = int(re.match(r'\d+\.\d+\.(\d+)', ver).group(1))
+
+    # 3.x trees
+    if tree(ver) >= 3:
+        r = re.match(r'\d+\.(\d+)', ver)
+    # 2.x trees
+    else:
+        r = re.match(r'\d+\.\d+\.(\d+)', ver)
+
+    # if there's no match, the version is invalid
+    try: r = int(r.group(1))
+    except: 
+        error("Invalid tree version!")
+        sys.exit(-1)
+
+    #for -rc versions return the previous stable version
     if p: r = r - 1
+    if r == -1: r = 39
+    
     return r
 
 def pre(ver):
-    try: return re.match(r'\d+\.\d+\.\d+(\.\d+)?-((rc|pre)\d+)', ver).group(2)
+    # 3.x trees
+    if tree(ver) >= 3:
+        p = re.match(r'\d+\.\d+(\.\d+)?-(rc\d+)', ver)
+    # 2.x trees
+    else:
+        p = re.match(r'\d+\.\d+\.\d+(\.\d+)?-(rc\d+)', ver)
+
+    try: return p.group(2)
     except: return None
 
 def post(ver):
-    try: return re.match(r'\d+\.\d+\.\d+\.(\d+)', ver).group(1)
+    # 3.x trees
+    if tree(ver) >= 3:
+        p = re.match(r'\d+\.\d+\.(\d+)', ver)
+    # 2.x trees
+    else: 
+        p = re.match(r'\d+\.\d+\.\d+\.(\d+)', ver)
+    
+    try: return p.group(1)
     except: return None
 
 def prenum(ver):
-    try: return int(re.match(r'\d+\.\d+\.\d+-((rc|pre)(\d+))', ver).group(3))
+    # 3.x trees
+    if tree(ver) >= 3:
+        p = re.match(r'\d+\.\d+(\.\d+)?-rc(\d+)', ver)
+    # 2.x trees
+    else:
+        p = re.match(r'\d+\.\d+\.\d+(\.\d+)?-rc(\d+)', ver)
+    
+    try: return p.group(2)
     except: return None
 
 def prebase(ver):
-    return re.match(r'(\d+\.\d+\.\d+((-(rc|pre)|\.)\d+)?)', ver).group(1)
+    # 3.x trees
+    if tree(ver) >= 3:
+        p = re.match(r'(\d+\.\d+(\.\d+)?(-rc\d+)?)', ver)
+    else:
+        p = re.match(r'(\d+\.\d+\.\d+(\.\d+)?(-rc\d+)?)', ver)
+
+    try: return p.group(1)
+    except: return None
 
 def revbase(ver):
-    return "%s.%s" % (tree(ver), rev(ver))
+    t = tree(ver)
+    r = rev(ver)
+    # make sure 3.0-rcs are patched correctly against 2.6.39
+    if t == 3 and r == 39:
+        t = 2.6
+
+    return "%s.%s" % (t, r)
 
 def base(ver):
     v = revbase(ver)
@@ -148,20 +210,44 @@ def base(ver):
     return v
 
 def forkname(ver):
-    try: return re.match(r'\d+.\d+.\d+(\.\d+)?(-(rc|pre)\d+)?(-([a-zA-Z]+)(-)?(\d+)?)?',
-            ver).group(5)
+    # 3.x trees
+    if tree(ver) >= 3:
+        f = re.match(r'\d+\.\d+(\.\d+)?(-(rc|pre)\d+)?(-([a-zA-Z]+)(-)?(\d+)?)?',
+            ver)
+    # 2.x trees
+    else:
+        f = re.match(r'\d+\.\d+\.\d+(\.\d+)?(-(rc|pre)\d+)?(-([a-zA-Z]+)(-)?(\d+)?)?',
+            ver)
+    
+    try: return f.group(5)
     except: return None
 
 def forknum(ver):
-    try: return int(re.match(r'\d+.\d+.\d+(\.\d+)?(-(rc|pre)\d+)?(-([a-zA-Z]+)(-)?(\d+)?)?',
-            ver).group(7))
+    # 3.x trees
+    if tree(ver) >=3:
+        f = re.match(r'\d+\.\d+(\.\d+)?(-(rc|pre)\d+)?(-([a-zA-Z]+)(-)?(\d+)?)?',
+            ver)
+    #2.x trees
+    else:
+        f = re.match(r'\d+\.\d+\.\d+(\.\d+)?(-(rc|pre)\d+)?(-([a-zA-Z]+)(-)?(\d+)?)?',
+            ver)
+
+    try: return int(f.group(7))
     except: return None
 
 def fork(ver):
-    try: return re.match(r'\d+.\d+.\d+(\.\d+)?(-(rc|pre)\d+)?((\.\d+)?-(\w+(-)?(\d+)?))?',
-            ver).group(4)
+    # 3.x trees
+    if tree(ver) >= 3:
+        f = re.match(r'\d+\.\d+(\.\d+)?(-(rc|pre)\d+)?((\.\d+)?-(\w+(-)?(\d+)?))?',
+            ver)
+    # 2.x trees
+    else:
+        f = re.match(r'\d+\.\d+\.\d+(\.\d+)?(-(rc|pre)\d+)?((\.\d+)?-(\w+(-)?(\d+)?))?',
+            ver)
+    try: return f.group(4)
     except: return None
 
+#FIXME: at some point the Makefile for 3.x kernels will change
 def get_ver(makefile):
     """ Read the version information from the specified makefile """
     part = {}
@@ -172,10 +258,15 @@ def get_ver(makefile):
             try: part[p] = re.match(r'%s\s*=\s*(\S+)' % p, l).group(1)
             except: pass
 
-    version = "%s.%s.%s" % tuple([part[p] for p in parts[:3]])
+    # atm we use VERSION.PATCHLEVEL for Linus' releases and EXTRAVERSION for
+    # the -stable releases
+    if part['VERSION'] >= '3':
+        version = "%s.%s" % tuple([part[p] for p in parts[:2]])
+    else:
+        version = "%s.%s.%s" % tuple([part[p] for p in parts[:3]])
     version += part.get("EXTRAVERSION","")
     version += part.get("CKVERSION","")
-	
+    
     # required for -next patchset 
     try: n = open("localversion-next")
     except: return version
@@ -206,7 +297,13 @@ def compare_ver(a, b):
 
     c = cmp(float(tree(a)), float(tree(b)))
     if c: return c
-    c = cmp(rev(a), rev(b))
+    # compare correctly the 3.0-rc versions
+    ra, rb = rev(a), rev(b)
+    if (tree(a) == 3 and ra == 39): 
+        ra = -1
+    if (tree(b) == 3 and rb == 39):
+        rb = -1
+    c = cmp(ra, rb)
     if c: return c
     c = cmp(int(post(a) or 0), int(post(b) or 0))
     if c: return c
@@ -288,7 +385,12 @@ def latest_dir(url, pat):
     return p[-1]
 
 def find_info(ver):
-    b = "%.1f" % tree(ver)
+    t = tree(ver)
+    # 3.x and 2.x kernels must be handled differently
+    if t >= 3:
+        b = "%d" % t
+    else:
+        b = "%.1f" % t
     f = forkname(ver)
     p = pre(ver)
 
@@ -594,7 +696,8 @@ def transform(a, b):
     if not a:
         a = install_nearest(base(b))
     t = tree(a)
-    if t != tree(b):
+    # 2.4 -> >=2.6 and >=2.6 -> 2.4 are not supported
+    if (t ==2.4 and tree(b) != 2.4) or (tree(b) == 2.4 and t != 2.4):
         error("Can't patch %s to %s" % (tree(a), tree(b)))
         sys.exit(-1)
     if fork(a):
@@ -607,14 +710,27 @@ def transform(a, b):
 
         if post(a) and (post(a) != post(b) or rev(a) != rev(b)):
             apply_patch(prebase(a), 1)
-
+        
+        # handle the transition from 2.6.39 to 3.0
         ra, rb = rev(a), rev(b)
-        if ra > rb:
+        if tree(a) == tree(b) and ra > rb:
             for r in range(ra, rb, -1):
-                apply_patch("%s.%s" % (t, r), -1)
-        if ra < rb:
+                apply_patch("%s.%s" % (tree(a), r), -1)
+        if tree(a) == tree(b) and ra < rb:
             for r in range(ra + 1, rb + 1):
-                apply_patch("%s.%s" % (t, r))
+                apply_patch("%s.%s" % (tree(b), r))
+        if tree(a) > tree(b):
+            for r in range(ra, -1, -1):
+                apply_patch("%s.%s" % (tree(a), r), -1)
+            for r in range(39, rb, -1):
+                apply_patch("%s.%s" % (tree(b), r), -1)
+        if tree(b) > tree(a):
+            for r in range(ra + 1, 40):
+                apply_patch("%s.%s" % (tree(a), r))
+            if rb != 39:
+                for r in range(0, rb + 1, 1):
+                    apply_patch("%s.%s" % (tree(b), r))
+
         a = revbase(b)
 
         if post(b) and post(a) != post(b):
@@ -650,25 +766,25 @@ version_info = {
     '2.4': (latest_dir,
             "%(kernel_url)s" + "/v2.4" + "/patch-%(base)s.bz2",
             r'patch-(.*?).bz2',
-            1, "old stable kernel series"),
+            1, "2.4 kernel series"),
     '2.6': (latest_dir,
             ["%(kernel_url)s" + "/v2.6" + "/patch-%(prebase)s.bz2",
              "%(kernel_url)s" + "/v2.6/longterm/v%(revbase)s/patch-%(prebase)s.bz2"],
             r'patch-(.*?).bz2',
-            1, "current stable kernel series"),
+            1, "2.6 kernel series"),
     '2.6-lt': (latest_dir_lt,
                ["%(kernel_url)s" + "/v2.6" + "/patch-%(prebase)s.bz2",
                 "%(kernel_url)s" + "/v2.6/longterm/v%(revbase)s/patch-%(prebase)s.bz2"],
                r'patch-(.*?).bz2',
-               1, "stable kernel series - update (only) to newer longterm stable releases (fourth number of 2.6 kernels)"),
+               1, "2.6 kernel series - update (only) to newer longterm stable releases (fourth number of 2.6 kernels)"),
     '2.6-rc': (latest_dir,
                "%(kernel_url)s" + "/v2.6" + "/testing/patch-%(prebase)s.bz2",
                r'patch-(.*?).bz2',
-               1, "current stable kernel series prereleases"),
+               1, "2.6 kernel series prereleases"),
     '2.6-git': (latest_dir,
                 "%(kernel_url)s" + "/v2.6" + "/snapshots/patch-%(full)s.bz2",
                 r'patch-(.*?).bz2',
-                1, "current stable kernel series snapshots"),
+                1, "2.6 kernel series snapshots"),
     '2.6-rt': (latest_dir,
                ["%(kernel_url)s" + "/projects/rt/patch-%(full)s.bz2",
                 "%(kernel_url)s" + "/projects/rt/older/patch-%(full)s.bz2"],
@@ -684,14 +800,35 @@ version_info = {
                "/%(revbase)s/%(revbase)s%(fork)s/patch-%(revbase)s%(fork)s.bz2",
                "", 0,
                "Con Kolivas' -ck patchset"),
+    # use this for older -next releases (could be removed)
     '2.6-next': (latest_dir,
                  "%(kernel_url)s" + "/v2.6/next" + "/patch-v%(prebase)s%(fork)s.bz2",
+                 r'patch-v2.6(.*?).bz2',
+                 0, "2.6 linux-next tree"),
+    # current -next releases, for 3.x kernels
+    # FIXME: URL probably going to change (/v2.6/next -> /v3.0/next)
+    '3-next': (latest_dir,
+                 "%(kernel_url)s" + "/v2.6/next" + "/patch-v%(prebase)s%(fork)s.bz2",
                  r'patch-v(.*?).bz2',
-                 0, "linux-next tree"),
-    '2.6-mm': (latest_mmotm, 
+                 0, "3 linux-next tree"),
+    # FIXME: when the new -mmotm for 3.0-rc gets released
+    '3-mm': (latest_mmotm, 
                "http://userweb.kernel.org/~akpm/mmotm/broken-out.tar.gz",
                r'broken-out.tar.gz',
                0, "-mmotm quilt patchset"),
+    '3-rc': (latest_dir,
+             "%(kernel_url)s" + "/v3.0" + "/testing/patch-%(prebase)s.bz2",
+             r'patch-(.*?).bz2',
+             0, "current stable kernel series prereleases"),
+    '3-git': (latest_dir,
+                "%(kernel_url)s" + "/v3.0" + "/snapshots/patch-%(full)s.bz2",
+                r'patch-(.*?).bz2',
+                0, "current stable kernel series snapshots"),
+    '3': (latest_dir,
+            ["%(kernel_url)s" + "/v3.0" + "/patch-%(prebase)s.bz2",
+             "%(kernel_url)s" + "/v3.0/longterm/v%(revbase)s/patch-%(prebase)s.bz2"],
+            r'patch-(.*?).bz2',
+            1, "2.6 kernel series"),
     }
 
 # Override defaults with ~/.ketchuprc which is just a Python script
