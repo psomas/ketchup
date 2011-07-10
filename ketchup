@@ -633,10 +633,9 @@ def untar(tarfile):
         error("Unpacking failed: ", err)
         sys.exit(-1)
 
-    err = os.system("mv linux*/* linux*/.[^.]* ..; rmdir linux*")
-    if err:
-        error("Unpacking failed: ", err)
-        sys.exit(-1)
+    ldir = glob.glob("linux*")[0]
+    for f in os.listdir(ldir):
+        os.rename(ldir + "/" + f, "../" + f)
 
     os.chdir(old)
     shutil.rmtree("ketchup-tmp")
