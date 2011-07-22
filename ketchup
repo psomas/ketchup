@@ -645,6 +645,12 @@ def install_nearest(ver):
     tarballs = glob.glob(archive + "/linux-%s.*.tar.bz2" % t)
     list = []
 
+    # ugly hack, upstream dir is /v3.0 (not v3)
+    # FIXME: we assume that this will be the case for linux-4.0 and later releases
+    #         if not, we'll have to fix it again :)
+    if t >= 3:
+        t = "%s.0" % t
+
     for f in tarballs:
         m = re.match(r'.*/linux-(.*).tar.bz2$', f)
         v = m.group(1)
