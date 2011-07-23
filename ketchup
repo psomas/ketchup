@@ -652,6 +652,12 @@ def install_nearest(ver):
         list.append((d, f, v))
     list.sort()
 
+    # ugly hack, upstream dir is /v3.0 (not v3)
+    # FIXME: we assume that this will be the case for linux-4.0 and later releases
+    # if not, we'll have to fix it again :)
+    if t >= 3:
+        t += '.0'
+
     if not list or (options["full-tarball"] and list[0][0]):
         f = "linux-%s.tar.bz2" % ver
         url = "%s/v%s/%s" % (kernel_url, t, f)
