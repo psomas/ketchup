@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# ketchup 1.0.1
+# ketchup 1.1
 #    http://github.com/psomas/ketchup 
 #    git://github.com/psomas/ketchup.git
 #
@@ -29,7 +29,7 @@
 #  ketchup <version>
 #
 # where version is a complete kernel version, or a branch name to grab
-# the latest version
+# the latest version (see the available trees)
 #
 # You can override some variables by creating a ~/.ketchuprc file.
 # The ~/.ketchuprc is just a Python script, eg. it might look like this:
@@ -723,10 +723,16 @@ def install_nearest(ver):
     return ver
 
 def find_ver(ver):
-    t = []
     m = re.match(r'mainline.*', ver)
     if m:
         t = latest_major()
+    else:
+        m = re.match(r'(\d+)(-rc|-git)?$', ver)
+        if m:
+            t = tree(m.group(1) + '.0') 
+            ver = 'mainline' 
+            if m.group(2):
+                ver += m.group(2)
 
     if ver in version_info.keys():
         v = version_info[ver]
