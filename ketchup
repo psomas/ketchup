@@ -148,8 +148,12 @@ def rev(ver):
 
     #for -rc versions return the previous stable version
     if p: r = r - 1
-    if r == -1: r = 39
-    
+    if r == -1:
+        t = int(tree(ver)) - 1
+        if t == 2:
+            t = 2.6
+        r = last_minor(t)
+		
     return r
 
 def pre(ver):
@@ -199,8 +203,11 @@ def revbase(ver):
     t = tree(ver)
     r = rev(ver)
     # make sure 3.0-rcs are patched correctly against 2.6.39
-    if t == 3 and r == 39:
-        t = 2.6
+    t1 = t - 1
+    if t1 == 2:
+        t1 = 2.6
+    if r == last_minor(t1):
+        t = t1
 
     return "%s.%s" % (t, r)
 
@@ -297,12 +304,7 @@ def compare_ver(a, b):
 
     c = cmp(float(tree(a)), float(tree(b)))
     if c: return c
-    # compare correctly the 3.0-rc versions
     ra, rb = rev(a), rev(b)
-    if (tree(a) == 3 and ra == 39): 
-        ra = -1
-    if (tree(b) == 3 and rb == 39):
-        rb = -1
     c = cmp(ra, rb)
     if c: return c
     c = cmp(int(post(a) or 0), int(post(b) or 0))
@@ -320,11 +322,7 @@ def last(url, pat="(.*/)"):
     return n
 
 def latest_mmotm(url, pat):
-    for l in  urllib.urlopen(url + "/broken-out/mm.patch").readlines():
-        m = re.search('-EXTRAVERSION = (\S+)', l)
-        if m: n = m.group(1)
-
-    latest = latest_dir(os.path.dirname(version_info['3-rc'][1]), ('patch-(.*%s).bz2' % n)) 
+    latest = find_ver('mainline-rc')
 
     return latest + "-mm1"
 
@@ -354,7 +352,6 @@ def latest_dir_lt(url, pat):
             lv = get_ver('Makefile')
         except:
             lv = None
-        os.chdir(cwd)
     if not lv:
         qprint("No local version found. Use newest kernel release instead.")
         return latest_dir(url, pat)
@@ -371,22 +368,56 @@ def latest_dir_lt(url, pat):
     p.sort(compare_ver)
     return p[-1]
 
-def latest_dir(url, pat):
-    """Find the latest link matching pat at url after sorting"""
+def find_www(url, pat, grp):
+    """Parse the page the url is pointing to and fetch the matched items"""
     p = []
     url = url % { "kernel_url": kernel_url }
+    
     for l in urllib.urlopen(url).readlines():
         m = re.search('"%s"' % pat, l)
-        if m: p.append(m.group(1))
+        if m: p.append(m.group(grp))
 
+    return p
+
+def latest_dir(url, pat):
+    """Find the latest link matching pat at url after sorting"""
+    p = find_www(url, pat, 1)
     if not p: return None
 
     p.sort(compare_ver)
     return p[-1]
 
+    
+def find_majors(): 
+    return find_www(kernel_url, '.*v(\d+\.\d+).*', 1)
+    
+def latest_major():
+    p = find_majors()
+
+    p.sort(compare_ver)
+    return p[-1]
+
+transitions = {}
+def last_minor(t):
+    maj = t
+    if t >= 3:
+        maj += .0
+
+    url = kernel_url + ("/v%s" % maj)
+    if url in transitions:
+        return transitions[url]
+    else:
+        p = map(int, find_www(url, ".*linux-%s\.(\d+)\.tar\.bz2" % t, 1))
+        p.sort()
+
+        if not p:
+            return None
+
+        transitions[url] = p[-1]
+        return p[-1]
+
 def find_info(ver):
     t = tree(ver)
-    # 3.x and 2.x kernels must be handled differently
     if t >= 3:
         b = "%d" % t
     else:
@@ -394,11 +425,19 @@ def find_info(ver):
     f = forkname(ver)
     p = pre(ver)
 
+    if (not f) or f == 'git' or f == 'next' or f == 'mm':
+        b = 'mainline'
+
     s = b
+
     if f:
         s = "%s-%s" % (b, f)
     elif p:
         s = "%s-rc" % b
+
+    if f == "rt":
+        s = "rt"
+
 
     return version_info[s]
 
@@ -410,18 +449,19 @@ def version_urls(ver):
 
     v = {
         'full': ver,
-        'tree': tree(ver),
+        'tree': tree(ver) + .0,
         'base': base(ver),
         'prebase': prebase(ver),
         'fork': fork(ver),
         'revbase': revbase(ver),
-        'kernel_url': kernel_url
+        'kernel_url': kernel_url,
+        'full_tree': (tree(ver) + .0) + last_minor(tree(ver))
         }
 
     l = []
     for e in i:
         l.append(e % v)
-
+    
     return l
 
 def patch_path(ver):
@@ -529,7 +569,7 @@ def get_patch(ver):
         return f
 
     if re.search(r'-mm1', ver) != None:
-        if pre(find_ver('3-rc')) != pre(ver):
+        if pre(find_ver('mainline-rc')) != pre(ver):
             error("-mm1 patchset can only be applied to the latest -rc release!")
             sys.exit(-1)
 
@@ -656,7 +696,7 @@ def install_nearest(ver):
     # FIXME: we assume that this will be the case for linux-4.0 and later releases
     # if not, we'll have to fix it again :)
     if t >= 3:
-        t += '.0'
+        t += .0
 
     if not list or (options["full-tarball"] and list[0][0]):
         f = "linux-%s.tar.bz2" % ver
@@ -683,13 +723,26 @@ def install_nearest(ver):
     return ver
 
 def find_ver(ver):
+    t = []
+    m = re.match(r'mainline.*', ver)
+    if m:
+        t = latest_major()
+
     if ver in version_info.keys():
         v = version_info[ver]
-        d = v[1]
+
+        d = v[1] 
         if type(d) is type([]):
             d = d[0]
+            
         for n in range(5):
-            return v[0](os.path.dirname(d), v[2])
+            if m:
+				t = float(t)
+				return v[0](os.path.dirname(d) % {'kernel_url': kernel_url, 'tree': t, 'full_tree' :
+				latest_major()}, v[2])
+            else:
+                return v[0](os.path.dirname(d), v[2])
+
             error('retrying version lookup for %s' % ver)
     else:
         return ver
@@ -701,8 +754,8 @@ def transform(a, b):
     if not a:
         a = install_nearest(base(b))
     t = tree(a)
-    # 2.4 -> >=2.6 and >=2.6 -> 2.4 are not supported
-    if (t ==2.4 and tree(b) != 2.4) or (tree(b) == 2.4 and t != 2.4):
+    # We can't patch trees <= 2.4 to a newer tree
+    if (t <= 2.4 and tree(b) != t) or (tree(b) <= 2.4 and t != tree(b)):
         error("Can't patch %s to %s" % (tree(a), tree(b)))
         sys.exit(-1)
     if fork(a):
@@ -716,25 +769,37 @@ def transform(a, b):
         if post(a) and (post(a) != post(b) or rev(a) != rev(b)):
             apply_patch(prebase(a), 1)
         
-        # handle the transition from 2.6.39 to 3.0
         ra, rb = rev(a), rev(b)
-        if tree(a) == tree(b) and ra > rb:
+        ta, tb = tree(a), tree(b)
+        if tree(revbase(b)) != tb:
+            tb = tree(revbase(b))
+	
+        if ta == tb and ra > rb:
             for r in range(ra, rb, -1):
-                apply_patch("%s.%s" % (tree(a), r), -1)
-        if tree(a) == tree(b) and ra < rb:
+                apply_patch("%s.%s" % (ta, r), -1)
+        if ta == tb and ra < rb:
             for r in range(ra + 1, rb + 1):
-                apply_patch("%s.%s" % (tree(b), r))
-        if tree(a) > tree(b):
+                apply_patch("%s.%s" % (tb, r))
+        if ta > tb:
             for r in range(ra, -1, -1):
-                apply_patch("%s.%s" % (tree(a), r), -1)
-            for r in range(39, rb, -1):
-                apply_patch("%s.%s" % (tree(b), r), -1)
-        if tree(b) > tree(a):
-            for r in range(ra + 1, 40):
-                apply_patch("%s.%s" % (tree(a), r))
-            if rb != 39:
+                apply_patch("%s.%s" % (ta, r), -1)
+
+            t = tb
+
+            if t >= 3:
+                t += .0
+            
+            for r in range(last_minor(t), rb, -1):
+                apply_patch("%s.%s" % (tb, r), -1)
+        if tb > ta:
+            t = ta
+            if t >= 3:
+                t += .0
+            for r in range(ra + 1, last_minor(t) + 1):
+                apply_patch("%s.%s" % (ta, r))
+            if rb != last_minor(t):
                 for r in range(0, rb + 1, 1):
-                    apply_patch("%s.%s" % (tree(b), r))
+                    apply_patch("%s.%s" % (tb, r))
 
         a = revbase(b)
 
@@ -782,14 +847,6 @@ version_info = {
                 "%(kernel_url)s" + "/v2.6/longterm/v%(revbase)s/patch-%(prebase)s.bz2"],
                r'patch-(.*?).bz2',
                1, "2.6 kernel series - update (only) to newer longterm stable releases (fourth number of 2.6 kernels)"),
-    '2.6-rc': (latest_dir,
-               "%(kernel_url)s" + "/v2.6" + "/testing/patch-%(prebase)s.bz2",
-               r'patch-(.*?).bz2',
-               1, "2.6 kernel series prereleases"),
-    '2.6-git': (latest_dir,
-                "%(kernel_url)s" + "/v2.6" + "/snapshots/patch-%(full)s.bz2",
-                r'patch-(.*?).bz2',
-                1, "2.6 kernel series snapshots"),
     '2.6-rt': (latest_dir,
                ["%(kernel_url)s" + "/projects/rt/patch-%(full)s.bz2",
                 "%(kernel_url)s" + "/projects/rt/older/patch-%(full)s.bz2"],
@@ -805,37 +862,32 @@ version_info = {
                "/%(revbase)s/%(revbase)s%(fork)s/patch-%(revbase)s%(fork)s.bz2",
                "", 0,
                "Con Kolivas' -ck patchset"),
-    # use this for older -next releases (could be removed)
-    '2.6-next': (latest_dir,
-                 "%(kernel_url)s" + "/v2.6/next" + "/patch-v%(prebase)s%(fork)s.bz2",
-                 r'patch-v2.6(.*?).bz2',
-                 0, "2.6 linux-next tree"),
     # current -next releases, for 3.x kernels
     # FIXME: URL probably going to change (/v2.6/next -> /v3.0/next)
-    '3-next': (latest_dir,
+    'mainline-next': (latest_dir,
                  "%(kernel_url)s" + "/v2.6/next" + "/patch-v%(prebase)s%(fork)s.bz2",
                  r'patch-v(.*?).bz2',
-                 1, "3 linux-next tree"),
-    '3-mm': (latest_mmotm, 
+                 1, " linux-next tree"),
+    'mainline-mm': (latest_mmotm, 
                "http://userweb.kernel.org/~akpm/mmotm/broken-out.tar.gz",
                r'broken-out.tar.gz',
                0, "-mmotm quilt patchset"),
-    '3-rc': (latest_dir,
-             "%(kernel_url)s" + "/v3.0" + "/testing/patch-%(prebase)s.bz2",
-             r'patch-(.*?).bz2',
-             1, "current stable kernel series prereleases"),
-    '3-rt': (latest_dir,
+    'rt': (latest_dir,
              ["%(kernel_url)s" + "/projects/rt/patch-%(full)s.patch.bz2",
                "%(kernel_url)s" + "/projects/rt/older/patch-%(full)s.patch.bz2"],
-             r'patch-(3.*?).bz2',
+             r'patch-(.*?).bz2',
              0, "PREEMPT_RT real-time kernel"),
-    '3-git': (latest_dir,
-              "%(kernel_url)s" + "/v3.0" + "/snapshots/patch-%(full)s.bz2",
+    'mainline-rc': (latest_dir,
+             "%(kernel_url)s" + "/v%(tree)s" + "/testing/v%(full_tree)s/patch-%(prebase)s.bz2",
+             r'patch-(.*?).bz2',
+             1, "current stable kernel series prereleases"),
+    'mainline-git': (latest_dir,
+              "%(kernel_url)s" + "/v%(tree)s" + "/snapshots/patch-%(full)s.bz2",
               r'patch-(.*?).bz2',
               0, "current stable kernel series snapshots"),
-    '3': (latest_dir,
-          ["%(kernel_url)s" + "/v3.0" + "/patch-%(prebase)s.bz2",
-           "%(kernel_url)s" + "/v3.0/longterm/v%(revbase)s/patch-%(prebase)s.bz2"],
+    'mainline': (latest_dir,
+          ["%(kernel_url)s" + "/v%(tree)s" + "/patch-%(prebase)s.bz2",
+           "%(kernel_url)s" + "/v%(tree)s/longterm/v%(revbase)s/patch-%(prebase)s.bz2"],
           r'patch-(.*?).bz2',
           1, "current stable kernel series"),
     }
