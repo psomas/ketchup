@@ -206,7 +206,7 @@ def revbase(ver):
     t1 = t - 1
     if t1 == 2:
         t1 = 2.6
-    if r == last_minor(t1):
+    if t1 != 1.6 and r == last_minor(t1):
         t = t1
 
     return "%s.%s" % (t, r)
@@ -411,9 +411,11 @@ def last_minor(t):
         p.sort()
 
         if not p:
+            transitions[url] = None
             return None
 
         transitions[url] = p[-1]
+
         return p[-1]
 
 def find_info(ver):
