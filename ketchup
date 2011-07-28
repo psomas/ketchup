@@ -656,7 +656,7 @@ def install_nearest(ver):
     # FIXME: we assume that this will be the case for linux-4.0 and later releases
     # if not, we'll have to fix it again :)
     if t >= 3:
-        t += '.0'
+        t += .0
 
     if not list or (options["full-tarball"] and list[0][0]):
         f = "linux-%s.tar.bz2" % ver
