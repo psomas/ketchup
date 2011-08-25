@@ -1,0 +1,37 @@
+# Default onfiguration file for ketchup
+#
+# Stratos Psomadakis <psomas@cslab.ece.ntua.gr>
+# Thu Aug 25 21:18:43 EEST 2011
+
+def latest_mm(url, pat=""):
+    url += '/broken-out/mm.patch'
+
+    part = {}
+    parts = "VERSION PATCHLEVEL SUBLEVEL EXTRAVERSION CKVERSION".split(' ')
+    
+    for l in urllib.urlopen(url).readlines():
+        for p in parts:
+            try: part[p] = re.match(r'\s*[-]?%s\s*=\s*(\S+)' % p, l).group(1)
+            except: pass
+
+    if part['VERSION'] >= '3' and part['SUBLEVEL'] == '0':
+        version = "%s.%s" % tuple([part[p] for p in parts[:2]])
+    else:
+        version = "%s.%s.%s" % tuple([part[p] for p in parts[:3]])
+    version += part.get("EXTRAVERSION","")
+
+    return version + '-mm1'
+
+local_trees = {
+    'linux-mm': (latest_mm, 
+                 "http://userweb.kernel.org/~akpm/mmotm/broken-out.tar.gz",
+                 r'broken-out.tar.gz',
+                 0, "-mmotm quilt patchset"),
+    'linux-rt': (latest_dir,
+                 ["%(kernel_url)s" + "/projects/rt/patch-%(full)s.bz2",
+                  "%(kernel_url)s" + "/projects/rt/older/patch-%(full)s.bz2"],
+                 r'patch-(.*?).bz2',
+                 1, "PREEMPT_RT real-time kernel"),
+	}
+
+local_quilt_patchsets = ( "mm" )

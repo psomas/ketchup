@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# ketchup 1.1
+# ketchup 1.1-beta
 #    http://github.com/psomas/ketchup 
 #    git://github.com/psomas/ketchup.git
 #
@@ -39,7 +39,7 @@
 # gpg = '/weird/path/to/gpg'
 #
 
-import re, sys, urllib, os, getopt, glob, shutil, subprocess
+import re, sys, urllib, os, getopt, glob, shutil, subprocess, commands
 
 def error(*args):
     sys.stderr.write("ketchup: ")
@@ -112,6 +112,11 @@ gpg = "/usr/bin/gpg"
 precommand = postcommand = None
 default_tree = None
 local_trees = {}
+local_quilt_patchsets = ()
+quilt_patchsets = []
+
+minors= {}
+lmajor = None
 
 # Functions to parse version strings
 
@@ -153,7 +158,7 @@ def rev(ver):
         if t == 2:
             t = 2.6
         r = last_minor(t)
-		
+        
     return r
 
 def pre(ver):
@@ -254,31 +259,24 @@ def fork(ver):
     try: return f.group(4)
     except: return None
 
-#FIXME: at some point the Makefile for 3.x kernels will change
 def get_ver(makefile):
     """ Read the version information from the specified makefile """
-    part = {}
-    parts = "VERSION PATCHLEVEL SUBLEVEL EXTRAVERSION CKVERSION".split(' ')
-    m = open(makefile)
-    for l in m.readlines():
-        for p in parts:
-            try: part[p] = re.match(r'%s\s*=\s*(\S+)' % p, l).group(1)
-            except: pass
+    ver = commands.getoutput("make kernelversion") 
 
-    # atm we use VERSION.PATCHLEVEL for Linus' releases and EXTRAVERSION for
-    # the -stable releases
-    if part['VERSION'] >= '3':
-        version = "%s.%s" % tuple([part[p] for p in parts[:2]])
-    else:
-        version = "%s.%s.%s" % tuple([part[p] for p in parts[:3]])
-    version += part.get("EXTRAVERSION","")
-    version += part.get("CKVERSION","")
-    
+    version = full_tree(ver)
+    v = post(ver)
+    if v != '0':
+        version += '.' + v
+    f = fork(ver)
+    if f:
+        version += f
+
     # required for -next patchset 
-    try: n = open("localversion-next")
-    except: return version
-
-    version += n.read()[:-1]
+    try: 
+        n = open("localversion-next")
+        version += n.read()[:-1]
+    except: 
+        pass
 
     return version
 
@@ -304,6 +302,9 @@ def compare_ver(a, b):
 
     c = cmp(float(tree(a)), float(tree(b)))
     if c: return c
+    ra, rb = tree(revbase(a)), tree(revbase(b))
+    c = cmp(ra, rb)
+    if c: return c
     ra, rb = rev(a), rev(b)
     c = cmp(ra, rb)
     if c: return c
@@ -321,27 +322,6 @@ def last(url, pat="(.*/)"):
         if m: n = m.group(1)
     return n
 
-def latest_mmotm(url, pat):
-    latest = find_ver('mainline-rc')
-
-    return latest + "-mm1"
-
-def latest_ck(url, pat):
-    url = "http://www.kernel.org/pub/linux/kernel/people/ck/patches/2.6/"
-    url += last(url)
-    part = fork(last(url))
-    stable = latest_dir(os.path.dirname(version_info['2.6'][1][0]), version_info['2.6'][2])
-
-    return stable + part
-
-def latest_pf(url, pat):
-    url = "http://pf.natalenko.name/sources/"
-    url += last(url)
-    part = last(url,"(.*patch.*)")
-    part = re.search('\d+.\d+.\d+-pf\d+', part).group(0)
-    
-    return part
-
 def latest_dir_lt(url, pat):
     """Find the latest link to the stable release series that is used local"""
     cwd=os.getcwd()
@@ -352,12 +332,22 @@ def latest_dir_lt(url, pat):
             lv = get_ver('Makefile')
         except:
             lv = None
+    if not lv and os.listdir("."):
+        error("Can't find kernel version for non-empty directory")
+        sys.exit(-1)
     if not lv:
         qprint("No local version found. Use newest kernel release instead.")
         return latest_dir(url, pat)
-    local_revbase = revbase(lv)
+    local_revbase = full_tree(lv)
     p = []
-    url = url % { "kernel_url": kernel_url }
+
+    s = {
+        'tree': float(tree(local_revbase)),
+        'kernel_url': kernel_url,
+		'revbase' : revbase(lv)
+    }
+    
+    url = url % s
     for l in urllib.urlopen(url).readlines():
         m = re.search('"%s"' % pat, l)
         if m and revbase(m.group(1))==local_revbase:
@@ -371,7 +361,6 @@ def latest_dir_lt(url, pat):
 def find_www(url, pat, grp):
     """Parse the page the url is pointing to and fetch the matched items"""
     p = []
-    url = url % { "kernel_url": kernel_url }
     
     for l in urllib.urlopen(url).readlines():
         m = re.search('"%s"' % pat, l)
@@ -381,68 +370,91 @@ def find_www(url, pat, grp):
 
 def latest_dir(url, pat):
     """Find the latest link matching pat at url after sorting"""
-    p = find_www(url, pat, 1)
+    s = {
+        'tree': latest_major(),
+        'kernel_url': kernel_url,
+        'full_tree': latest_major()
+    }
+    
+    p = find_www(url % s, pat, 1)
     if not p: return None
 
     p.sort(compare_ver)
     return p[-1]
 
-    
 def find_majors(): 
     return find_www(kernel_url, '.*v(\d+\.\d+).*', 1)
-    
+   
 def latest_major():
-    p = find_majors()
+    global lmajor
+    if lmajor == None:
+        p = find_majors()
 
-    p.sort(compare_ver)
-    return p[-1]
+        p.sort(compare_ver)
+        lmajor = p[-1]
 
-transitions = {}
+    return lmajor
+
 def last_minor(t):
     maj = t
     if t >= 3:
         maj += .0
 
-    url = kernel_url + ("/v%s" % maj)
-    if url in transitions:
-        return transitions[url]
-    else:
+    if maj not in minors:
+        url = kernel_url + ("/v%s" % maj)
+
         p = map(int, find_www(url, ".*linux-%s\.(\d+)\.tar\.bz2" % t, 1))
         p.sort()
 
-        if not p:
-            transitions[url] = None
-            return None
+        if p:
+            minors[maj] = int(p[-1])
+        else:
+            minors[maj] = None
 
-        transitions[url] = p[-1]
-
-        return p[-1]
+    return minors[maj]
 
 def find_info(ver):
+    b = "linux%s"
+
     t = tree(ver)
-    if t >= 3:
-        b = "%d" % t
+    if t == 2.4:
+       s = b % '-2.4'
     else:
-        b = "%.1f" % t
-    f = forkname(ver)
-    p = pre(ver)
+        f = forkname(ver)
+        p = pre(ver)
 
-    if (not f) or f == 'git' or f == 'next' or f == 'mm':
-        b = 'mainline'
+        if f:
+            fd = '-' + f
+            s = b % fd
+        elif p:
+            s = b % '-rc'
+        else:
+            s = b % ''
 
-    s = b
+        if s not in version_info:
+            error("Unknown tree/patchset!")
+            sys.exit(-1)
 
-    if f:
-        s = "%s-%s" % (b, f)
-    elif p:
-        s = "%s-rc" % b
+        v = version_info[s]
 
-    if f == "rt":
-        s = "rt"
-
-
+        if f in quilt_patchsets:
+            if ver != v[0](os.path.dirname(v[1])):
+                error("%s can only be applied to specific kernel versions" % s)
+                sys.exit(-1)
+            
     return version_info[s]
 
+def full_tree(ver):
+    if tree(ver) >= 3:
+        t = re.match(r'(\d+\.\d+)', ver)
+    else:
+        t = re.match(r'(\d+\.\d+\.\d+)', ver)
+
+    if t == None:
+        error("Invalid tree version!")
+    return t.group(0)
+
+    
 def version_urls(ver):
     """ Return the URL for the patch associated with the specified version """
     i = find_info(ver)[1]
@@ -457,7 +469,7 @@ def version_urls(ver):
         'fork': fork(ver),
         'revbase': revbase(ver),
         'kernel_url': kernel_url,
-        'full_tree': (tree(ver) + .0) + last_minor(tree(ver))
+        'full_tree': full_tree(ver),
         }
 
     l = []
@@ -570,11 +582,6 @@ def get_patch(ver):
     if os.path.exists(f):
         return f
 
-    if re.search(r'-mm1', ver) != None:
-        if pre(find_ver('mainline-rc')) != pre(ver):
-            error("-mm1 patchset can only be applied to the latest -rc release!")
-            sys.exit(-1)
-
     if f[-4:] == ".bz2":
         f2 = f[:-4] + ".gz"
         if os.path.exists(f2):
@@ -593,7 +600,7 @@ def get_patch(ver):
 
     return f
 
-def apply_mmotm(ver, reverse = 0):
+def apply_quilt(ver, reverse = 0):
     if reverse:
         err = os.system("quilt pop -a &> .patchdiag")
         if err:
@@ -631,11 +638,12 @@ def apply_patch(ver, reverse = 0):
         r = " -R"
 
     qprint("Applying %s%s" % (os.path.basename(p), r))
+    print os.path.basename(p)
     if options["dry-run"] or options["only-dl"]:
         return ver
 
-    if forkname(ver) == "mm":
-        return apply_mmotm(ver, reverse)
+    if forkname(ver) in quilt_patchsets:
+        return apply_quilt(ver, reverse)
 
     def cmd(patch, reverse, dry):
         base = "patch -l -p1%s" % reverse
@@ -684,19 +692,33 @@ def untar(tarfile):
 
 def install_nearest(ver):
     t = tree(ver)
-    tarballs = glob.glob(archive + "/linux-%s.*.tar.bz2" % t)
+    if t == 2.4:
+        tarballs = glob.glob(archive + "/linux-%s.*.tar.bz2" % t)
+    else: 
+        tarballs = glob.glob(archive + "/linux-2.6.*.tar.bz2")
+        tarballs += glob.glob(archive + "/linux-[3-9].*.tar.bz2")
+    
     list = []
-
     for f in tarballs:
         m = re.match(r'.*/linux-(.*).tar.bz2$', f)
         v = m.group(1)
-        d = abs(rev(v) - rev(ver))
+        dt = tree(v) - tree(ver)
+        # if we're 2 'major' trees apart, just get the full tarball
+        if(abs(dt) > 1):
+            break
+        # carefully calc how many 'steps' we're away from the target version
+        else:
+            if dt == 0:
+                d = abs(rev(v) - rev(ver))
+            elif dt == 1:
+                d = abs(last_minor(tree(ver)) - rev(ver) + rev(v) + 1)
+            else:
+                d = abs(last_minor(tree(v)) - rev(v) + rev(ver) + 1)
+
         list.append((d, f, v))
+
     list.sort()
 
-    # ugly hack, upstream dir is /v3.0 (not v3)
-    # FIXME: we assume that this will be the case for linux-4.0 and later releases
-    # if not, we'll have to fix it again :)
     if t >= 3:
         t += .0
 
@@ -725,32 +747,15 @@ def install_nearest(ver):
     return ver
 
 def find_ver(ver):
-    m = re.match(r'mainline.*', ver)
-    if m:
-        t = latest_major()
-    else:
-        m = re.match(r'(\d+)(-rc|-git)?$', ver)
-        if m:
-            t = tree(m.group(1) + '.0') 
-            ver = 'mainline' 
-            if m.group(2):
-                ver += m.group(2)
-
     if ver in version_info.keys():
         v = version_info[ver]
 
         d = v[1] 
         if type(d) is type([]):
             d = d[0]
-            
-        for n in range(5):
-            if m:
-				t = float(t)
-				return v[0](os.path.dirname(d) % {'kernel_url': kernel_url, 'tree': t, 'full_tree' :
-				latest_major()}, v[2])
-            else:
-                return v[0](os.path.dirname(d), v[2])
 
+        for n in range(5):
+            return v[0](os.path.dirname(d), v[2])
             error('retrying version lookup for %s' % ver)
     else:
         return ver
@@ -781,7 +786,7 @@ def transform(a, b):
         ta, tb = tree(a), tree(b)
         if tree(revbase(b)) != tb:
             tb = tree(revbase(b))
-	
+    
         if ta == tb and ra > rb:
             for r in range(ra, rb, -1):
                 apply_patch("%s.%s" % (ta, r), -1)
@@ -837,70 +842,46 @@ def rename_dir(v):
     os.rename(cwd, newdir)
     qprint('Current directory renamed to %s' % newdir)
 
-
 # latest lookup function, canonical urls, pattern for lookup function,
 # signature flag, description
 version_info = {
-    '2.4': (latest_dir,
-            "%(kernel_url)s" + "/v2.4" + "/patch-%(base)s.bz2",
-            r'patch-(.*?).bz2',
-            1, "2.4 kernel series"),
-    '2.6': (latest_dir,
-            ["%(kernel_url)s" + "/v2.6" + "/patch-%(prebase)s.bz2",
-             "%(kernel_url)s" + "/v2.6/longterm/v%(revbase)s/patch-%(prebase)s.bz2"],
-            r'patch-(.*?).bz2',
-            1, "2.6 kernel series"),
-    '2.6-lt': (latest_dir_lt,
-               ["%(kernel_url)s" + "/v2.6" + "/patch-%(prebase)s.bz2",
-                "%(kernel_url)s" + "/v2.6/longterm/v%(revbase)s/patch-%(prebase)s.bz2"],
-               r'patch-(.*?).bz2',
-               1, "2.6 kernel series - update (only) to newer longterm stable releases (fourth number of 2.6 kernels)"),
-    '2.6-rt': (latest_dir,
-               ["%(kernel_url)s" + "/projects/rt/patch-%(full)s.bz2",
-                "%(kernel_url)s" + "/projects/rt/older/patch-%(full)s.bz2"],
-               r'patch-(2.6.*?).bz2',
-               0, "Ingo Molnar's realtime-preempt kernel"),
-    '2.6-pf': (latest_pf, 
-               "http://pf.natalenko.name/sources" + "/%(revbase)s" 
-               + "/patch-%(full)s.bz2",
-               r'patch-(.*?).bz2',
-               0, "-pf kernel patchset"),
-    '2.6-ck': (latest_ck,
-               "%(kernel_url)s" + "/people/ck/patches/2.6" +
-               "/%(revbase)s/%(revbase)s%(fork)s/patch-%(revbase)s%(fork)s.bz2",
-               "", 0,
-               "Con Kolivas' -ck patchset"),
-    # current -next releases, for 3.x kernels
-    # FIXME: URL probably going to change (/v2.6/next -> /v3.0/next)
-    'mainline-next': (latest_dir,
+    'linux-2.4': (latest_dir,
+                 "%(kernel_url)s" + "/v2.4" + "/patch-%(base)s.bz2",
+                 r'patch-(.*?).bz2',
+                 1, "2.4 kernel series"),
+    'linux-next': (latest_dir,
                  "%(kernel_url)s" + "/v2.6/next" + "/patch-v%(prebase)s%(fork)s.bz2",
                  r'patch-v(.*?).bz2',
-                 1, " linux-next tree"),
-    'mainline-mm': (latest_mmotm, 
-               "http://userweb.kernel.org/~akpm/mmotm/broken-out.tar.gz",
-               r'broken-out.tar.gz',
-               0, "-mmotm quilt patchset"),
-    'rt': (latest_dir,
-             ["%(kernel_url)s" + "/projects/rt/patch-%(full)s.bz2",
-               "%(kernel_url)s" + "/projects/rt/older/patch-%(full)s.bz2"],
-             r'patch-(.*?).bz2',
-             0, "PREEMPT_RT real-time kernel"),
-    'mainline-rc': (latest_dir,
-             "%(kernel_url)s" + "/v%(tree)s" + "/testing/v%(full_tree)s/patch-%(prebase)s.bz2",
-             r'patch-(.*?).bz2',
-             1, "current stable kernel series prereleases"),
-    'mainline-git': (latest_dir,
-              "%(kernel_url)s" + "/v%(tree)s" + "/snapshots/patch-%(full)s.bz2",
-              r'patch-(.*?).bz2',
-              0, "current stable kernel series snapshots"),
-    'mainline': (latest_dir,
-          ["%(kernel_url)s" + "/v%(tree)s" + "/patch-%(prebase)s.bz2",
-           "%(kernel_url)s" + "/v%(tree)s/longterm/v%(revbase)s/patch-%(prebase)s.bz2"],
-          r'patch-(.*?).bz2',
-          1, "current stable kernel series"),
+                 1, "linux-next tree"),
+    'linux-rc': (latest_dir,
+                 ["%(kernel_url)s" + "/v%(tree)s" + "/testing/patch-%(prebase)s.bz2",
+                  "%(kernel_url)s" + "/v%(tree)s" + "/testing/v%(full_tree)s/patch-%(prebase)s.bz2"],
+                 r'patch-(.*?).bz2',
+                 1, "current stable kernel series prereleases"),
+    'linux-git': (latest_dir,
+                 "%(kernel_url)s" + "/v%(tree)s" + "/snapshots/patch-%(full)s.bz2",
+                 r'patch-(.*?).bz2',
+                 1, "current stable kernel series snapshots"),
+    'linux-lt': (latest_dir_lt,
+                 ["%(kernel_url)s" + "/v%(tree)s/longterm/v%(revbase)s/patch-%(prebase)s.bz2",
+                 "%(kernel_url)s" + "/v%(tree)s" + "/patch-%(prebase)s.bz2"],
+                 r'patch-(.*?).bz2',
+                 1, "longterm kernel series - update (only) to newer longterm stable releases"),
+    'linux': (latest_dir,
+                 ["%(kernel_url)s" + "/v%(tree)s" + "/patch-%(prebase)s.bz2",
+                  "%(kernel_url)s" + "/v%(tree)s/longterm/v%(revbase)s/patch-%(prebase)s.bz2"],
+                 r'patch-(.*?).bz2',
+                 1, "current stable kernel series"),
     }
 
-# Override defaults with ~/.ketchuprc which is just a Python script
+# Override defaults with /etc/ketchuprc and ~/.ketchuprc which are just Python scripts
+rcpath = '/etc/ketchuprc'
+if os.path.isfile(rcpath):
+    try:
+        execfile(rcpath)
+    except Exception, e:
+        sys.exit('Failed parsing %s\nError was: %s' % (rcpath, e))
+
 rcpath = os.path.expanduser('~/.ketchuprc')
 if os.path.isfile(rcpath):
     try:
@@ -911,6 +892,10 @@ if os.path.isfile(rcpath):
 # Add local trees
 for k,v in local_trees.items():
     version_info[k] = v
+
+# Add local quilt patchsets
+for p in local_quilt_patchsets:
+    quilt_patchsets += p
 
 # Environment variables override defaults and ketchuprc
 kernel_url = os.environ.get("KETCHUP_URL", kernel_url)
@@ -941,91 +926,90 @@ opts = [
     ('w', 'wget', wget, 'command to use for wget'),
     ]
 
-args = fancyopts(sys.argv[1:], opts, options,
-                 'ketchup [options] [ver]')
-
-archive = options["archive"]
-kernel_url = options["kernel-url"]
-if options["no-gpg"]: options["gpg-path"] = ''
-
 # Process args
+def process_args(args):
+    archive = options["archive"]
+    kernel_url = options["kernel-url"]
+    if options["no-gpg"]: options["gpg-path"] = ''
 
-if not os.path.exists(options["directory"]):
-    qprint("Creating target directory", options["directory"])
-    os.mkdir(options["directory"])
-os.chdir(options["directory"])
+    if not os.path.exists(options["directory"]):
+        qprint("Creating target directory", options["directory"])
+        os.mkdir(options["directory"])
+    os.chdir(options["directory"])
 
-if os.path.isfile(".ketchuprc"):
-    try:
-        execfile(".ketchuprc")
-    except Exception, e:
-        sys.exit('Failed parsing .ketchuprc\nError was: %s' % (e))
+    if options["list-trees"]:
+        l = version_info.keys()
+        l.sort()
+        for tree in l:
+            if version_info[tree][3] == 0:
+                lprint(tree, "(unsigned)")
+            else:
+                lprint(tree, "(signed)")
+            lprint(" " + version_info[tree][4])
+        sys.exit(0)
 
-if options["list-trees"]:
-    l = version_info.keys()
-    l.sort()
-    for tree in l:
-        if version_info[tree][3] == 0:
-            lprint(tree, "(unsigned)")
+    if options["show-makefile"] and len(args) < 2:
+        if not args:
+            lprint(get_ver("Makefile"))
         else:
-            lprint(tree, "(signed)")
-        lprint(" " + version_info[tree][4])
-    sys.exit(0)
+            lprint(get_ver(args[0]))
+        sys.exit(0)
 
-if options["show-makefile"] and len(args) < 2:
-    if not args:
-        lprint(get_ver("Makefile"))
-    else:
-        lprint(get_ver(args[0]))
-    sys.exit(0)
+    if len(args) == 0 and default_tree:
+        qprint("Using default tree \"%s\"" % (default_tree))
+        args.append(default_tree)
 
-if len(args) == 0 and default_tree:
-    qprint("Using default tree \"%s\"" % (default_tree))
-    args.append(default_tree)
+    if len(args) != 1:
+        error("No version given on command line and no default in configuration")
+        sys.exit(-1)
 
-if len(args) != 1:
-    error("No version given on command line and no default in configuration")
-    sys.exit(-1)
+    if options["show-latest"]:
+        lprint(find_ver(args[0]))
+        sys.exit(0)
 
-if options["show-latest"]:
-    lprint(find_ver(args[0]))
-    sys.exit(0)
+    if options["show-url"]:
+        for v in version_urls(find_ver(args[0])):
+            if urllib.urlopen(v).getcode() != 404:
+                break
+        lprint(v)
+        sys.exit(0)
 
-if options["show-url"]:
-    lprint(version_urls(find_ver(args[0]))[0])
-    sys.exit(0)
+    if options["show-previous"]:
+        v = find_ver(args[0])
+        p = prebase(v)
+        if p == v: p = base(v)
+        if p == v:
+            if rev(v) > 0: p = "%.1f.%s" % (tree(v), rev(v) -1)
+            else: p = "unknown"
+        lprint(p)
+        sys.exit(0)
 
-if options["show-previous"]:
-    v = find_ver(args[0])
-    p = prebase(v)
-    if p == v: p = base(v)
-    if p == v:
-        if rev(v) > 0: p = "%.1f.%s" % (tree(v), rev(v) -1)
-        else: p = "unknown"
-    lprint(p)
-    sys.exit(0)
+    if not os.path.exists(options["archive"]):
+        qprint("Creating cache directory", options["archive"])
+        os.mkdir(options["archive"])
 
-if not os.path.exists(options["archive"]):
-    qprint("Creating cache directory", options["archive"])
-    os.mkdir(options["archive"])
+    if precommand and os.system(precommand):
+        sys.exit('Precommand "%s" failed!' % precommand)
 
-if precommand and os.system(precommand):
-    sys.exit('Precommand "%s" failed!' % precommand)
+    try:
+        a = get_ver('Makefile')
+    except:
+        a = None
 
-try:
-    a = get_ver('Makefile')
-except:
-    a = None
+    if not a and os.listdir("."):
+        error("Can't find kernel version for non-empty directory")
+        sys.exit(-1)
 
-if not a and os.listdir("."):
-    error("Can't find kernel version for non-empty directory")
-    sys.exit(-1)
+    b = find_ver(args[0])
+    qprint("%s -> %s" % (a, b))
+    transform(a, b)
+    if options["rename-directory"] and not options["dry-run"] and not options["only-dl"] :
+        rename_dir(b)
 
-b = find_ver(args[0])
-qprint("%s -> %s" % (a, b))
-transform(a, b)
-if options["rename-directory"] and not options["dry-run"] and not options["only-dl"] :
-    rename_dir(b)
+    if postcommand and os.system(postcommand):
+        sys.exit('Postcommand "%s" failed!' % postcommand)
 
-if postcommand and os.system(postcommand):
-    sys.exit('Postcommand "%s" failed!' % postcommand)
+if __name__ == "__main__":
+    args = fancyopts(sys.argv[1:], opts, options,
+                     'ketchup [options] [ver]')
+    process_args(args)
