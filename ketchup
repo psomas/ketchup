@@ -261,22 +261,36 @@ def fork(ver):
 
 def get_ver(makefile):
     """ Read the version information from the specified makefile """
-    ver = commands.getoutput("make kernelversion") 
+    (err, ver) = commands.getstatusoutput("make kernelversion") 
+    
+    # if we get an error, it's a 2.4 kernel with no support for kernelversion
+    if err:
+        part = {}
+        parts = "SUBLEVEL EXTRAVERSION".split(' ')
+        with open(makefile) as m:
+            for l in m.readlines():
+                for p in parts:
+                    try: 
+                        part[p] = re.match(r'%s\s*=\s*(\S+)' % p, l).group(1)
+                        if p == "EXTRAVERSION":
+                            break
+                    except: pass
+            version = '2.4.' + part.get("SUBLEVEL", "") + part.get("EXTRAVERSION", "")
+    else:
+        version = full_tree(ver)
+        v = post(ver)
+        if v != '0':
+            version += '.' + v
+        f = fork(ver)
+        if f:
+            version += f
 
-    version = full_tree(ver)
-    v = post(ver)
-    if v != '0':
-        version += '.' + v
-    f = fork(ver)
-    if f:
-        version += f
-
-    # required for -next patchset 
-    try: 
-        n = open("localversion-next")
-        version += n.read()[:-1]
-    except: 
-        pass
+        # required for -next patchset 
+        try: 
+            n = open("localversion-next")
+            version += n.read()[:-1]
+        except: 
+            pass
 
     return version
 
@@ -638,7 +652,6 @@ def apply_patch(ver, reverse = 0):
         r = " -R"
 
     qprint("Applying %s%s" % (os.path.basename(p), r))
-    print os.path.basename(p)
     if options["dry-run"] or options["only-dl"]:
         return ver
 
