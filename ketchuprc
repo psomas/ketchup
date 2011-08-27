@@ -28,8 +28,10 @@ local_trees = {
                  r'broken-out.tar.gz',
                  0, "-mmotm quilt patchset"),
     'linux-rt': (latest_dir,
+                 ["%(kernel_url)s" + "/projects/rt/patch-%(full)s.patch.bz2",
                  ["%(kernel_url)s" + "/projects/rt/patch-%(full)s.bz2",
-                  "%(kernel_url)s" + "/projects/rt/older/patch-%(full)s.bz2"],
+                  "%(kernel_url)s" + "/projects/rt/older/patch-%(full)s.bz2",
+                  "%(kernel_url)s" + "/projects/rt/older/patch-%(full)s.patch.bz2"],
                  r'patch-(.*?).bz2',
                  1, "PREEMPT_RT real-time kernel"),
 	}
