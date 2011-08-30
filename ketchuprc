@@ -29,7 +29,7 @@ local_trees = {
                  0, "-mmotm quilt patchset"),
     'linux-rt': (latest_dir,
                  ["%(kernel_url)s" + "/projects/rt/patch-%(full)s.patch.bz2",
-                 ["%(kernel_url)s" + "/projects/rt/patch-%(full)s.bz2",
+                  "%(kernel_url)s" + "/projects/rt/patch-%(full)s.bz2",
                   "%(kernel_url)s" + "/projects/rt/older/patch-%(full)s.bz2",
                   "%(kernel_url)s" + "/projects/rt/older/patch-%(full)s.patch.bz2"],
                  r'patch-(.*?).bz2',

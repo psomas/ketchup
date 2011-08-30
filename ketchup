@@ -285,9 +285,8 @@ def get_ver(makefile):
         if f:
             version += f
 
-        # required for -next patchset 
         try: 
-            n = open("localversion-next")
+            n = open(glob.glob("localversion-*")[0])
             version += n.read()[:-1]
         except: 
             pass
