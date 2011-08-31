@@ -39,7 +39,7 @@
 # gpg = '/weird/path/to/gpg'
 #
 
-import re, sys, urllib, os, getopt, glob, shutil, subprocess, commands
+import re, sys, urllib, os, getopt, glob, shutil, subprocess
 
 def error(*args):
     sys.stderr.write("ketchup: ")
@@ -261,35 +261,32 @@ def fork(ver):
 
 def get_ver(makefile):
     """ Read the version information from the specified makefile """
-    (err, ver) = commands.getstatusoutput("make kernelversion") 
-    
-    # if we get an error, it's a 2.4 kernel with no support for kernelversion
-    if err:
-        part = {}
-        parts = "SUBLEVEL EXTRAVERSION".split(' ')
-        with open(makefile) as m:
-            for l in m.readlines():
-                for p in parts:
-                    try: 
-                        part[p] = re.match(r'%s\s*=\s*(\S+)' % p, l).group(1)
-                        if p == "EXTRAVERSION":
-                            break
-                    except: pass
-            version = '2.4.' + part.get("SUBLEVEL", "") + part.get("EXTRAVERSION", "")
+    part = {}
+    extra = {}
+    parts = "VERSION PATCHLEVEL SUBLEVEL".split(' ')
+    m = open(makefile)
+    for l in m.readlines():
+        for p in parts:
+            try: part[p] = re.match(r'%s\s*=\s*(\S+)' % p, l).group(1)
+            except:            
+                # get any other extra versions defined in the makefile (except
+                # kernel version)
+                v = re.match(r'(\S+VERSION)\s*=\s*(\S+)', l)
+                try:
+                    if v.group(1) != 'KERNELVERSION':
+                        extra[v.group(1)] = v.group(2)
+                except:
+                    pass
+            
+    if part['VERSION'] >= '3'and part['SUBLEVEL'] == '0':
+        version = "%s.%s" % tuple([part[p] for p in parts[:2]])
     else:
-        version = full_tree(ver)
-        v = post(ver)
-        if v != '0':
-            version += '.' + v
-        f = fork(ver)
-        if f:
-            version += f
+        version = "%s.%s.%s" % tuple([part[p] for p in parts[:3]])
 
-        try: 
-            n = open(glob.glob("localversion-*")[0])
-            version += n.read()[:-1]
-        except: 
-            pass
+    for v in extra.keys():
+        version += extra.get(v, "")
+    
+    version += get_localversion()
 
     return version
 
@@ -428,6 +425,10 @@ def last_minor(t):
 
 def find_info(ver):
     b = "linux%s"
+
+    if ver == None:
+        error("Cannot find latest version!")
+        sys.exit(-1)
 
     t = tree(ver)
     if t == 2.4:
@@ -763,12 +764,14 @@ def find_ver(ver):
         v = version_info[ver]
 
         d = v[1] 
-        if type(d) is type([]):
-            d = d[0]
+        if type(d) is not type([]):
+            d = [ d ]
 
-        for n in range(5):
-            return v[0](os.path.dirname(d), v[2])
-            error('retrying version lookup for %s' % ver)
+        for u in d:
+            version = v[0](os.path.dirname(u), v[2])
+            if version != None:
+                return version
+        return version
     else:
         return ver
 
@@ -866,8 +869,8 @@ version_info = {
                  r'patch-v(.*?).bz2',
                  1, "linux-next tree"),
     'linux-rc': (latest_dir,
-                 ["%(kernel_url)s" + "/v%(tree)s" + "/testing/patch-%(prebase)s.bz2",
-                  "%(kernel_url)s" + "/v%(tree)s" + "/testing/v%(full_tree)s/patch-%(prebase)s.bz2"],
+                 [ "%(kernel_url)s" + "/v%(tree)s" + "/testing/patch-%(prebase)s.bz2",
+                 "%(kernel_url)s" + "/v%(tree)s" + "/testing/v%(full_tree)s/patch-%(prebase)s.bz2"],
                  r'patch-(.*?).bz2',
                  1, "current stable kernel series prereleases"),
     'linux-git': (latest_dir,
@@ -929,7 +932,6 @@ opts = [
     ('m', 'show-makefile', None, 'output version in makefile <arg>'),
     ('n', 'dry-run', None, 'don\'t download or apply patches'),
     ('o', 'only-dl', None, 'don\'t apply patches'),
-    ('p', 'show-previous', None, 'output version previous to <arg>'),
     ('q', 'quiet', None, 'reduce output'),
     ('r', 'rename-directory', None, 'rename updated directory to %s<v>'
      % rename_prefix),
@@ -982,19 +984,10 @@ def process_args(args):
     if options["show-url"]:
         for v in version_urls(find_ver(args[0])):
             if urllib.urlopen(v).getcode() != 404:
-                break
-        lprint(v)
-        sys.exit(0)
-
-    if options["show-previous"]:
-        v = find_ver(args[0])
-        p = prebase(v)
-        if p == v: p = base(v)
-        if p == v:
-            if rev(v) > 0: p = "%.1f.%s" % (tree(v), rev(v) -1)
-            else: p = "unknown"
-        lprint(p)
-        sys.exit(0)
+                lprint(v)
+                sys.exit(0)
+        error("Cannot find patch for %s" % args[0])
+        sys.exit(-1)
 
     if not os.path.exists(options["archive"]):
         qprint("Creating cache directory", options["archive"])
@@ -1010,6 +1003,15 @@ def process_args(args):
 
     if not a and os.listdir("."):
         error("Can't find kernel version for non-empty directory")
+        sys.exit(-1)
+
+    # make sure the patch has a valid url / exists
+    for v in version_urls(find_ver(args[0])):
+        code = urllib.urlopen(v).getcode()
+        if code != 404:
+            break
+    if code == 404:
+        error("Cannot find patch for %s" % args[0])
         sys.exit(-1)
 
     b = find_ver(args[0])
