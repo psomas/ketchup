@@ -118,6 +118,8 @@ quilt_patchsets = []
 minors= {}
 lmajor = None
 
+compress_types = {".bz2" : "bzcat", ".gz" : "gzcat", ".xz" : "xzcat"}
+
 # Functions to parse version strings
 
 def tree(ver):
@@ -354,7 +356,7 @@ def latest_dir_lt(url, pat):
     s = {
         'tree': float(tree(local_revbase)),
         'kernel_url': kernel_url,
-		'revbase' : revbase(lv)
+        'revbase' : revbase(lv)
     }
     
     url = url % s
@@ -521,14 +523,8 @@ def download(url, f):
         os.rename(f + ".partial", f)
     return 1
 
-def check_if_gpg_key_available(url, f, sign):
-    if options["no-gpg"] or options["dry-run"] or not options["gpg-path"]:
-        return 1
-    sf = f + sign
+def check_if_gpg_key_available(sf):
     qprint("Check if GPG key is available...")
-    if not download(url + sign, sf):
-        error("signature download failed")
-        return 0
 
     process= subprocess.Popen([options["gpg-path"], "--no-tty", "--batch", "--verify",sf,sf],
                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -539,24 +535,39 @@ def check_if_gpg_key_available(url, f, sign):
         error("The GPG key seems not to be in the keyring. Please fix this and try again.")
         qprint("In the case potential malicious kernel code is not a problem,\n"
                "you can skip the verifying by using --no-gpg.")
-        return -1
+        return 0
     if r < 0: # killed by signal
-        return -1
+        return 0
     return 1
 
 def verify(url, f, sign):
     if options["no-gpg"] or options["dry-run"] or not options["gpg-path"]:
         return 1
 
+    m = None
+
     sf = f + sign
     if not os.path.isfile(sf) and not download(url + sign, sf):
-        error("signature download failed")
-        error("removing files...")
-        os.unlink(f)
-        return 0
+        m = re.match("\S+(\.tar)?(\.\S+)$", f)
+        m = m.group(2)
+
+        f2 = f.replace(m, '')
+        sf = f2 + sign
+        url = url.replace(m, '')
+        if not m or not os.path.isfile(sf) and not download(url + sign, sf):
+            error("signature download failed")
+            error("removing files...")
+            os.unlink(f)
+            return 0
+
+    if not check_if_gpg_key_available(sf):
+        return -1
 
     qprint("Verifying signature...")
-    r = os.system("%s --verify %s %s" % (options["gpg-path"], sf, f))
+    if not m:
+        r = os.system("%s --verify %s %s" % (options["gpg-path"], sf, f))
+    else:
+        r = os.system("%s %s | %s --verify %s -" % (compress_types[m], f, options["gpg-path"], sf))
     if r:
         error("gpg returned %d" % r)
         error("removing files...")
@@ -568,26 +579,37 @@ def verify(url, f, sign):
 
 def trydownload(urls, f, sign):
     for url in urls:
-        if sign:
-            result=check_if_gpg_key_available(url, f, sign)
-            if result < 0: # gpg key not available
-                return None
-            elif result==0: # download failed
-                continue
         if download(url, f):
-            if not sign or verify(url, f, sign):
+            if not sign :
                 return f
+            result = verify(url, f, sign)
+            if result == -1:
+                return None
+            elif result == 1:
+                return f
+
         if url[-4:] == ".bz2":
             f2 = f[:-4] + ".gz"
             url2 = url[:-4] + ".gz"
             if download(url2, f2):
-                if not sign or verify(url2, f2, sign):
+                if not sign:
+                    return f2
+                result = verify(url2, f2, sign)
+                if result == -1:
+                    return None
+                elif result == 1:
                     return f2
             f2 = f[:-4]
             url2 = url[:-4]
             if download(url2, f2):
-                if not sign or verify(url2, f2, sign):
+                if not sign:
                     return f2
+                result = verify(url2, f2, sign)
+                if result == -1:
+                    return None
+                elif result == 1:
+                    return f2
+
     return None
 
 def get_patch(ver):
