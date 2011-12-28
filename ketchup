@@ -456,11 +456,14 @@ def download(url, f):
 def check_if_gpg_key_available(url, f, sign):
     if options["no-gpg"] or options["dry-run"] or not options["gpg-path"]:
         return 1
-    sf = f + sign
     qprint("Check if GPG key is available...")
-    if not download(url + sign, sf):
-        error("signature download failed")
-        return 0
+    sf = f + sign
+    if not download(url+sign, sf):
+        sf = os.path.splitext(f)[0] + sign
+        sign_url = os.path.splitext(url)[0] + sign
+        if not download(sign_url, sf):
+             error("signature download failed")
+             return 0
 
     process= subprocess.Popen([options["gpg-path"], "--no-tty", "--batch", "--verify",sf,sf],
                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -480,15 +483,36 @@ def verify(url, f, sign):
     if options["no-gpg"] or options["dry-run"] or not options["gpg-path"]:
         return 1
 
+    need_extract=False
+
     sf = f + sign
-    if not os.path.isfile(sf) and not download(url + sign, sf):
+    sign_url = url + sign
+    if not os.path.isfile(sf) and not download(sign_url, sf):
+        sf = os.path.splitext(f)[0] + sign
+        sign_url = os.path.splitext(url)[0] + sign
+        need_extract=True
+
+    if not os.path.isfile(sf) and not download(sign_url, sf):
         error("signature download failed")
         error("removing files...")
-        os.unlink(f)
+        os.unlink(sf)
         return 0
 
     qprint("Verifying signature...")
-    r = os.system("%s --verify %s %s" % (options["gpg-path"], sf, f))
+    if need_extract:
+        if f[-4:] == ".bz2":
+	        r = os.system("bzcat %s | %s --verify %s -" % (f,options["gpg-path"], sf))
+        elif f[-3:] == ".gz":
+	        r = os.system("zcat %s | %s --verify %s -" % (f,options["gpg-path"], sf))
+        else:
+            error("Cannot check signature: Unknown compression algorithm")
+            error("removing files...")
+            os.unlink(f)
+            os.unlink(sf)
+            return 1
+    else:
+	    r = os.system("%s --verify %s %s" % (options["gpg-path"], sf, f))
+
     if r:
         error("gpg returned %d" % r)
         error("removing files...")
