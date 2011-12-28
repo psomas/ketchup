@@ -716,6 +716,9 @@ def apply_patch(ver, reverse = 0):
 
 def untar(tarfile):
     old = os.getcwd()
+    if os.path.exists("ketchup-tmp"):
+        error("Please remove the ketchup-tmp directory by hand.")
+        sys.exit(-1)
     os.mkdir("ketchup-tmp")
     os.chdir("ketchup-tmp")
 
