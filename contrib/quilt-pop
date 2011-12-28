@@ -9,10 +9,7 @@ def main(args):
     if not os.path.exists(quilt):
         sys.exit('Can\'t find quilt binary "%s"' % quilt)
 
-    if os.path.basename(args[0]) == 'quilt-pop':
-        unquilt()
-    else:
-        requilt()
+    unquilt()
 
 def load_quilt_top():
     if not os.path.exists(saved): return None
@@ -31,12 +28,5 @@ def unquilt():
 
     if os.system(quilt + ' pop -a > /dev/null') >> 8:
         sys.exit('Failed popping quilt patches!')
-
-def requilt():
-    top = load_quilt_top()
-    if not top: return
-
-    if os.system('quilt push %s > /dev/null' % top) >> 8:
-        sys.exit('Failed pushing quilt patches! Reapply manually')
 
 main(sys.argv)
