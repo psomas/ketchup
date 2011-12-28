@@ -449,6 +449,12 @@ def download(url, f):
             error("wget terminated by signal.")
             sys.exit(1)
         if e:
+            try:
+                # remove empty files
+                if os.path.getsize(f+".partial")==0:
+                    os.unlink(f+".partial")
+            except OSError:
+                pass
             return None
         os.rename(f + ".partial", f)
     return 1
