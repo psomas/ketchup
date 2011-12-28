@@ -504,6 +504,8 @@ def verify(url, f, sign):
 	        r = os.system("bzcat %s | %s --verify %s -" % (f,options["gpg-path"], sf))
         elif f[-3:] == ".gz":
 	        r = os.system("zcat %s | %s --verify %s -" % (f,options["gpg-path"], sf))
+        elif f[-3:] == ".xz":
+	        r = os.system("xzcat %s | %s --verify %s -" % (f,options["gpg-path"], sf))
         else:
             error("Cannot check signature: Unknown compression algorithm")
             error("removing files...")
@@ -530,20 +532,25 @@ def trydownload(urls, f, sign):
                 return None
             elif result==0: # download failed
                 continue
-        if download(url, f):
+        if os.path.isfile(f):
             if not sign or verify(url, f, sign):
                 return f
         if url[-4:] == ".bz2":
-            f2 = f[:-4] + ".gz"
-            url2 = url[:-4] + ".gz"
-            if download(url2, f2):
-                if not sign or verify(url2, f2, sign):
-                    return f2
-            f2 = f[:-4]
-            url2 = url[:-4]
-            if download(url2, f2):
-                if not sign or verify(url2, f2, sign):
-                    return f2
+            try_exts=['.xz', '.bz2', '.gz', '']
+            for ext in try_exts:
+                f2=f[:-4]+ext
+                if os.path.isfile(f2):
+                    if not sign or verify(url, f2, sign):
+                        return f2
+            for ext in try_exts:
+                f2=f[:-4]+ext
+                url2 = url[:-4] + ext
+                if download(url2, f2):
+                    if not sign or verify(url2, f2, sign):
+                        return f2
+        elif download(url, f):
+            if not sign or verify(url, f, sign):
+                return f
     return None
 
 def get_patch(ver):
@@ -558,6 +565,9 @@ def get_patch(ver):
             sys.exit(-1)
 
     if f[-4:] == ".bz2":
+        f2 = f[:-4] + ".xz"
+        if os.path.exists(f2):
+            return f2
         f2 = f[:-4] + ".gz"
         if os.path.exists(f2):
             return f2
@@ -628,6 +638,8 @@ def apply_patch(ver, reverse = 0):
             pipe = "bzcat %s | %s" % (patch, base)
         elif p[-3:] == ".gz":
             pipe = "zcat %s | %s" % (patch, base)
+        elif p[-3:] == ".xz":
+            pipe = "xzcat %s | %s" % (patch, base)
         else:
             pipe = "%s < %s" % (base, patch)
 
@@ -652,7 +664,17 @@ def untar(tarfile):
     os.mkdir("ketchup-tmp")
     os.chdir("ketchup-tmp")
 
-    err = os.system("bzcat %s | tar -xf -" % tarfile)
+    if tarfile[-4:] == ".bz2":
+        err = os.system("tar -jxf %s" % tarfile)
+    elif tarfile[-3:] == ".gz":
+        err = os.system("tar -zxf %s" % tarfile)
+    elif tarfile[-3:] == ".xz":
+        err = os.system("xzcat %s | tar -xf -" % tarfile)
+    elif tarfile[-4:] == ".tar":
+        err = os.system("tar -xf %s" % tarfile)
+    else:
+        err="Unknown compression algorithm."
+
     if err:
         error("Unpacking failed: ", err)
         sys.exit(-1)
@@ -660,7 +682,6 @@ def untar(tarfile):
     ldir = glob.glob("linux*")[0]
     for f in os.listdir(ldir):
         os.rename(ldir + "/" + f, "../" + f)
-
     os.chdir(old)
     shutil.rmtree("ketchup-tmp")
 
