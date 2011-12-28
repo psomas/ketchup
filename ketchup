@@ -720,19 +720,20 @@ def untar(tarfile):
         error("Please remove the ketchup-tmp directory by hand.")
         sys.exit(-1)
     os.mkdir("ketchup-tmp")
-    os.chdir("ketchup-tmp")
+    try:
+        os.chdir("ketchup-tmp")
 
-    err = os.system("bzcat %s | tar -xf -" % tarfile)
-    if err:
-        error("Unpacking failed: ", err)
-        sys.exit(-1)
+        err = os.system("bzcat %s | tar -xf -" % tarfile)
+        if err:
+            error("Unpacking failed: ", err)
+            sys.exit(-1)
 
-    ldir = glob.glob("linux*")[0]
-    for f in os.listdir(ldir):
-        os.rename(ldir + "/" + f, "../" + f)
-
-    os.chdir(old)
-    shutil.rmtree("ketchup-tmp")
+        ldir = glob.glob("linux*")[0]
+        for f in os.listdir(ldir):
+            os.rename(ldir + "/" + f, "../" + f)
+    finally:
+        os.chdir(old)
+        shutil.rmtree("ketchup-tmp")
 
 def install_nearest(ver):
     t = tree(ver)
