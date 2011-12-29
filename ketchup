@@ -118,7 +118,7 @@ quilt_patchsets = []
 minors= {}
 lmajor = None
 
-compress_types = {".bz2" : "bzcat", ".gz" : "gzcat", ".xz" : "xzcat"}
+compress_types = {".bz2" : "bzcat", ".gz" : "gzcat", ".xz" : "xzcat", "" : "cat"}
 
 # Functions to parse version strings
 
@@ -550,16 +550,16 @@ def verify(url, f, sign):
     if options["no-gpg"] or options["dry-run"] or not options["gpg-path"]:
         return 1
 
-    m = None
+    m = ""
 
     sf = f + sign
     if not os.path.isfile(sf) and not download(url + sign, sf):
-        m = re.match("\S+(\.tar)?(\.\S+)$", f)
-        m = m.group(2)
+        try: m = re.search("\.(bz2|xz|gz)$", f).group(0)
+        except: m = ""
 
-        f2 = f.replace(m, '')
+        f2 = f[:-len(m)]
         sf = f2 + sign
-        url = url.replace(m, '')
+        url = url[:-len(m)]
         if not m or not os.path.isfile(sf) and not download(url + sign, sf):
             error("signature download failed")
             error("removing files...")
@@ -570,10 +570,10 @@ def verify(url, f, sign):
         return -1
 
     qprint("Verifying signature...")
-    if not m:
-        r = os.system("%s --verify %s %s" % (options["gpg-path"], sf, f))
-    else:
-        r = os.system("%s %s | %s --verify %s -" % (compress_types[m], f, options["gpg-path"], sf))
+#    if not m:
+#        r = os.system("%s --verify %s %s" % (options["gpg-path"], sf, f))
+#    else:
+    r = os.system("%s %s | %s --verify %s -" % (compress_types[m], f, options["gpg-path"], sf))
     if r:
         error("gpg returned %d" % r)
         error("removing files...")
@@ -594,19 +594,14 @@ def trydownload(urls, f, sign):
             elif result == 1:
                 return f
 
-        if url[-4:] == ".bz2":
-            f2 = f[:-4] + ".gz"
-            url2 = url[:-4] + ".gz"
-            if download(url2, f2):
-                if not sign:
-                    return f2
-                result = verify(url2, f2, sign)
-                if result == -1:
-                    return None
-                elif result == 1:
-                    return f2
-            f2 = f[:-4]
-            url2 = url[:-4]
+        try: m = re.search("\.(bz2|xz|gz)$", f).group(0)
+        except: m = ""
+
+        for c in compress_types.keys():
+            if c == m: continue
+
+            f2 = f[:-len(m)] + c
+            url2 = url[:-len(m)] + c
             if download(url2, f2):
                 if not sign:
                     return f2
@@ -624,11 +619,13 @@ def get_patch(ver):
     if os.path.exists(f):
         return f
 
-    if f[-4:] == ".bz2":
-        f2 = f[:-4] + ".gz"
-        if os.path.exists(f2):
-            return f2
-        f2 = f[:-4]
+    try: m = re.search("\.(bz2|xz|gz)$", f).group(0)
+    except: m = ""
+
+    for c in compress_types.keys():
+        if c == m: continue
+
+        f2 = f[:-len(m)] + c
         if os.path.exists(f2):
             return f2
 
@@ -691,12 +688,10 @@ def apply_patch(ver, reverse = 0):
         if dry:
             base += " --dry-run"
 
-        if p[-4:] == ".bz2":
-            pipe = "bzcat %s | %s" % (patch, base)
-        elif p[-3:] == ".gz":
-            pipe = "zcat %s | %s" % (patch, base)
-        else:
-            pipe = "%s < %s" % (base, patch)
+        try: m = re.search("\.(bz2|xz|gz)$", patch).group(0)
+        except: m = ""
+
+        pipe = "%s %s | %s" % (compress_types[m], patch, base)
 
         err = os.system(pipe + " > .patchdiag")
         if err:
@@ -723,7 +718,10 @@ def untar(tarfile):
     try:
         os.chdir("ketchup-tmp")
 
-        err = os.system("bzcat %s | tar -xf -" % tarfile)
+        try: m = re.search("\.(bz2|xz|gz)$", tarfile).group(0)
+        except: m = ""
+
+        err = os.system("%s %s | tar -xf -" % (compress_types[m], tarfile))
         if err:
             error("Unpacking failed: ", err)
             sys.exit(-1)
