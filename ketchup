@@ -909,9 +909,9 @@ version_info = {
                  r'patch-(.*?).bz2',
                  1, "longterm kernel series - update (only) to newer longterm stable releases"),
     'linux': (latest_dir,
-                 ["%(kernel_url)s" + "/v%(tree)s" + "/patch-%(prebase)s.bz2",
-                  "%(kernel_url)s" + "/v%(tree)s/longterm/v%(revbase)s/patch-%(prebase)s.bz2"],
-                 r'patch-(.*?).bz2',
+                 ["%(kernel_url)s" + "/v%(tree)s" + "/patch-%(prebase)s.xz",
+                  "%(kernel_url)s" + "/v%(tree)s/longterm/v%(revbase)s/patch-%(prebase)s.xz"],
+                 r'patch-(.*?).xz',
                  1, "current stable kernel series"),
     }
 
